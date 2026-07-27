@@ -6,6 +6,35 @@
 use podapp_win::{find_host_window, pids_of, CODEX_APP};
 
 fn main() {
+    // `--watch N`：跟随 N 秒，把每次位置变化打出来。拖动 Codex 窗口就能看见浮舱会贴到哪。
+    let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--watch") {
+        let secs: u64 = args
+            .iter()
+            .skip_while(|a| *a != "--watch")
+            .nth(1)
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(15);
+        println!("跟随 {secs} 秒 —— 现在去拖动 / 缩放 Codex 窗口试试。\n");
+        let _w = podapp_win::watch(
+            CODEX_APP,
+            Box::new(|w| match w {
+                Some(w) => println!(
+                    "  位置变化 → x={} y={} w={} h={}  浮舱贴 x={}",
+                    w.rect.x,
+                    w.rect.y,
+                    w.rect.w,
+                    w.rect.h,
+                    w.rect.right()
+                ),
+                None => println!("  宿主消失 —— 浮舱退到屏幕右缘独立停靠"),
+            }),
+        );
+        std::thread::sleep(std::time::Duration::from_secs(secs));
+        println!("\n跟随结束。");
+        return;
+    }
+
     let pids = pids_of(&CODEX_APP);
     println!("{} 进程：{} 个 {:?}", CODEX_APP.label, pids.len(), pids);
 

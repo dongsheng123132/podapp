@@ -14,8 +14,8 @@ use windows_sys::Win32::System::Threading::{
     PROCESS_QUERY_LIMITED_INFORMATION,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, GetWindow, GetWindowRect, GetWindowTextLengthW, GetWindowTextW,
-    GetWindowThreadProcessId, IsWindowVisible, GW_OWNER,
+    EnumWindows, GetWindow, GetWindowRect, GetWindowTextLengthW, GetWindowThreadProcessId,
+    IsWindowVisible, SendMessageTimeoutW, GW_OWNER, SMTO_ABORTIFHUNG, WM_GETTEXT,
 };
 
 fn wide_to_string(buf: &[u16]) -> String {
@@ -96,6 +96,16 @@ fn window_rect(hwnd: HWND) -> Option<Rect> {
     }
 }
 
+/// 窗口标题。**永远不许阻塞**，拿不到就返回空串。
+///
+/// 不用 `GetWindowTextW`：对**同进程**的窗口它会同步发 `WM_GETTEXT`，一直等到那个窗口
+/// 所在线程去抽消息为止。跟随线程要是卡在这儿，宿主一忙浮舱就整个僵住，
+/// 而表现只是「浮舱不动了」，根本看不出是卡在读标题。
+/// （这条是 `tests/follow.rs` 实测撞出来的死锁：跟随线程等测试线程抽消息，
+/// 测试线程正等跟随线程回调。）
+///
+/// `SendMessageTimeoutW` + `SMTO_ABORTIFHUNG` 是唯一保证不会挂住的取法。
+/// 标题只是给日志和界面看的装饰，为它冒卡死的风险不划算。
 fn window_title(hwnd: HWND) -> String {
     unsafe {
         let n = GetWindowTextLengthW(hwnd);
@@ -103,8 +113,20 @@ fn window_title(hwnd: HWND) -> String {
             return String::new();
         }
         let mut buf = vec![0u16; n as usize + 1];
-        let got = GetWindowTextW(hwnd, buf.as_mut_ptr(), buf.len() as i32);
-        wide_to_string(&buf[..got.max(0) as usize])
+        let mut got: usize = 0;
+        let ok = SendMessageTimeoutW(
+            hwnd,
+            WM_GETTEXT,
+            buf.len(),
+            buf.as_mut_ptr() as isize,
+            SMTO_ABORTIFHUNG,
+            200,
+            &mut got,
+        );
+        if ok == 0 {
+            return String::new();
+        }
+        wide_to_string(&buf)
     }
 }
 
@@ -161,6 +183,162 @@ pub fn refresh(w: &HostWindow) -> Option<Rect> {
         }
     }
     window_rect(hwnd).filter(|r| r.looks_like_a_real_window())
+}
+
+// ───────────────────────────── 跟随 ─────────────────────────────
+
+/// 跟随宿主窗口移动。
+///
+/// **移动走事件，发现走慢轮询** —— 两件事的要求完全不同，用同一种手段必然一边浪费一边卡：
+///
+/// - 宿主**移动**必须立刻跟上。轮询位置就算 30ms 一次，拖动窗口时浮舱也会明显滞后、
+///   像被拖着的橡皮筋。所以挂 `SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE)`，
+///   而且只挂在宿主那一个进程上（全局挂会收到整个桌面每个窗口的移动，白烧 CPU）。
+/// - 宿主**有没有启动**只能问，因为没进程就没东西可挂钩子。但「Codex 刚开」晚一秒发现
+///   完全无所谓，所以 1 秒一次，代价可以忽略。
+///
+/// 回调在专用线程上跑，不要在里面做重活。宿主没开着时回调收到 `None`，这是正常状态。
+pub struct Watcher {
+    stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+
+impl Drop for Watcher {
+    fn drop(&mut self) {
+        self.stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        if let Some(t) = self.thread.take() {
+            let _ = t.join();
+        }
+    }
+}
+
+type ChangeFn = Box<dyn Fn(Option<HostWindow>) + Send>;
+
+thread_local! {
+    /// 钩子回调拿不到用户数据，只能走线程局部。钩子就设在这个线程上，
+    /// 回调也投递到这个线程，所以线程局部是安全且够用的。
+    static WATCH_TARGET: std::cell::Cell<isize> = const { std::cell::Cell::new(0) };
+    static WATCH_DIRTY: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+unsafe extern "system" fn win_event_proc(
+    _hook: windows_sys::Win32::UI::Accessibility::HWINEVENTHOOK,
+    _event: u32,
+    hwnd: HWND,
+    id_object: i32,
+    _id_child: i32,
+    _thread: u32,
+    _time: u32,
+) {
+    // OBJID_WINDOW = 0：只关心窗口自己的移动，不关心它内部控件的
+    if id_object != 0 {
+        return;
+    }
+    WATCH_TARGET.with(|t| {
+        if t.get() == hwnd as isize {
+            WATCH_DIRTY.with(|d| d.set(true));
+        }
+    });
+}
+
+/// 开始跟随。返回的 [`Watcher`] 一旦 drop 就停。
+pub fn watch(app: HostApp, on_change: ChangeFn) -> Watcher {
+    use std::sync::atomic::Ordering;
+    use windows_sys::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        DispatchMessageW, MsgWaitForMultipleObjectsEx, PeekMessageW, EVENT_OBJECT_LOCATIONCHANGE,
+        MSG, MWMO_INPUTAVAILABLE, PM_REMOVE, QS_ALLINPUT, WINEVENT_OUTOFCONTEXT,
+    };
+
+    let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let stop2 = stop.clone();
+
+    let thread = std::thread::spawn(move || unsafe {
+        let mut current: Option<HostWindow> = None;
+        let mut hook: windows_sys::Win32::UI::Accessibility::HWINEVENTHOOK =
+            std::ptr::null_mut();
+        let mut hooked_pid = 0u32;
+
+        while !stop2.load(Ordering::Relaxed) {
+            // ① 慢节拍：宿主起没起、窗口还在不在
+            let still_there = current.as_ref().and_then(refresh);
+            match (&mut current, still_there) {
+                // 还在，位置可能变了 —— 位置变化由钩子那边标脏，这里只管存活
+                (Some(c), Some(r)) => {
+                    if c.rect != r {
+                        c.rect = r;
+                        on_change(Some(c.clone()));
+                    }
+                }
+                // 窗口没了：撤钩子，回到寻找状态
+                (slot @ Some(_), None) => {
+                    *slot = None;
+                    if !hook.is_null() {
+                        UnhookWinEvent(hook);
+                        hook = std::ptr::null_mut();
+                        hooked_pid = 0;
+                    }
+                    WATCH_TARGET.with(|t| t.set(0));
+                    on_change(None);
+                }
+                // 还没找到：找一次
+                (slot @ None, _) => {
+                    if let Some(w) = find_host_window(&app) {
+                        WATCH_TARGET.with(|t| t.set(w.hwnd));
+                        if hooked_pid != w.pid {
+                            if !hook.is_null() {
+                                UnhookWinEvent(hook);
+                            }
+                            // 只挂宿主这一个进程：全局挂会收到整个桌面的窗口移动事件
+                            hook = SetWinEventHook(
+                                EVENT_OBJECT_LOCATIONCHANGE,
+                                EVENT_OBJECT_LOCATIONCHANGE,
+                                std::ptr::null_mut(),
+                                Some(win_event_proc),
+                                w.pid,
+                                0,
+                                WINEVENT_OUTOFCONTEXT,
+                            );
+                            hooked_pid = w.pid;
+                        }
+                        on_change(Some(w.clone()));
+                        *slot = Some(w);
+                    }
+                }
+            }
+
+            // ② 快节拍：等钩子事件。有事件立刻醒，没事件 1 秒后醒一次做上面的存活检查。
+            //    这就是「移动零延迟、发现一秒内」两个要求各自被满足的地方。
+            MsgWaitForMultipleObjectsEx(
+                0,
+                std::ptr::null(),
+                1000,
+                QS_ALLINPUT,
+                MWMO_INPUTAVAILABLE,
+            );
+            let mut msg: MSG = std::mem::zeroed();
+            while PeekMessageW(&mut msg, std::ptr::null_mut(), 0, 0, PM_REMOVE) != 0 {
+                DispatchMessageW(&msg);
+            }
+
+            if WATCH_DIRTY.with(|d| d.replace(false)) {
+                if let Some(c) = current.as_mut() {
+                    if let Some(r) = refresh(c) {
+                        if c.rect != r {
+                            c.rect = r;
+                            on_change(Some(c.clone()));
+                        }
+                    }
+                }
+            }
+        }
+
+        if !hook.is_null() {
+            UnhookWinEvent(hook);
+        }
+    });
+
+    Watcher { stop, thread: Some(thread) }
 }
 
 #[cfg(test)]
