@@ -13,7 +13,7 @@ PodApp 就干这一件事：**把 AI 生成的不确定结果，交给确定的�
 ## 现在能跑什么
 
 ```bash
-cargo test                      # 单元 + 防漂移 + 向后兼容，38 项
+cargo test                      # 单元 + 防漂移 + 向后兼容 + 窗口跟随，65 项
 cargo run --example selftest    # 端到端：装 → 列 → 跑 → 卸，两种方言各一遍
 ```
 
@@ -27,6 +27,44 @@ crates/podapp-runtime/     运行时：清单 / 安装 / 动作分发 / 资源�
 apps/podapp-dock/          浮舱壳（Tauri 2）—— 尚未开始
 pods/                      官方程序舱源码 —— 尚未开始
 ```
+
+## 它是开放的吗
+
+**可插拔。** 桥上的动词由能力注册表提供，不是写死的 `match`：
+
+```rust
+struct QrScan;
+impl Capability for QrScan {
+    fn name(&self) -> &'static str { "qr" }
+    fn handles(&self, v: &str) -> bool { v == "qr.scan" }
+    fn required(&self, _: &str) -> Option<Cap> { None }   // 只声明，无权放行
+    fn call(&self, ctx: &CapCtx, _: &str, a: &Value) -> Result<Value, String> { … }
+}
+
+let caps = Capabilities::builtin().with(QrScan);   // 不用改这个 crate
+```
+
+权限闸由 `Capabilities::dispatch` **统一执行一次**。能力声明自己要什么权限，
+但没有放行的权力 —— 原来七个 `match` 分支各查一次权限，漏写一个就是一条敞开的路，
+而且没有任何症状。
+
+**它就是影核（ActionParity）的实现，不是「基于影核再造一层」。**
+影核是 ActionParity 的中文名，不是它下面的子协议。每个程序舱带一份 `action-parity.json`，
+`.pod` 和 `.ukapp` 共用它。规范里那几条硬要求都有落点：
+
+| 影核 | 落在哪 |
+|---|---|
+| §5.1 一个动作一条实现路径 | `headless::invoke` —— GUI / CLI / 无头 / 影子同一条 |
+| §10.3 乐观并发，不许默认「最后写入者获胜」 | `Invocation::expected_state_version` |
+| §10.4 全链路同一个关联 ID | `Invocation::execution_id` |
+| 宪法 16 远程写要幂等键 | `Invocation::idempotency_key` |
+
+装一个程序舱 = 给这台设备的动作面扩容。影子重新拉一次 `action_specs()` 就发现了新能力，
+用同一个 `action_id` 调即可 —— **影核那边不需要为程序舱做任何改动**。
+
+**独立。** `Cargo.toml` 里只有 serde / serde_json / flate2 / tar，对 U-King 零代码依赖。
+`Dialect::MiniApp` 是公开发表的剖面 `action-parity/miniapp@0.1`，不是某个产品的私有格式 ——
+支持一份开放剖面，和依赖一个产品，是两件事。U-King 只是 `HostProfile` 的一个取值。
 
 ## 三条不肯让步的设计
 
