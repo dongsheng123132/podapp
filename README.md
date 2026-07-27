@@ -13,9 +13,19 @@ PodApp 就干这一件事：**把 AI 生成的不确定结果，交给确定的�
 ## 现在能跑什么
 
 ```bash
-cargo test                      # 单元 + 防漂移 + 向后兼容 + 窗口跟随，65 项
-cargo run --example selftest    # 端到端：装 → 列 → 跑 → 卸，两种方言各一遍
+cargo test                             # 单元 + 防漂移 + 向后兼容 + 窗口跟随，68 项
+cargo run --example selftest           # 端到端：装 → 列 → 跑 → 卸，两种方言各一遍
+
+cd apps/podapp-dock && pnpm install && pnpm build   # 前端
+cd src-tauri && cargo build && ./target/debug/podapp-dock.exe
+
+cargo run -p podapp-win --example probe             # 现在能找到 Codex 吗，浮舱该停哪
+cargo run -p podapp-win --example probe -- --verify # 浮舱**实际**落点 == 算出来的落点？
 ```
+
+`--verify` 是这个项目里最有用的一条命令。「吸附对不对」没法靠截图和肉眼判断，
+它把浮舱真实的窗口矩形和 `dock::place` 算出来的逐字段比 —— 已经靠它抓到两个
+静默错误（DPI 坐标系混用、系统最小窗口宽度悄悄放大窗口）。
 
 自检会真的解包、真的原子换入、真的起 Node 子进程，并**真的验证沙箱拦得住越狱** ——
 夹具里那个动作模块会尝试读用户目录和起子进程，两次都必须被拒。
@@ -24,7 +34,8 @@ cargo run --example selftest    # 端到端：装 → 列 → 跑 → 卸，两�
 
 ```
 crates/podapp-runtime/     运行时：清单 / 安装 / 动作分发 / 资源服务 / 权限 / 无头执行
-apps/podapp-dock/          浮舱壳（Tauri 2）—— 尚未开始
+crates/podapp-win/         找宿主窗口 + 跟随 + 停靠几何（Windows）
+apps/podapp-dock/          浮舱壳：Tauri 2，吸附 / 热键 / 拖入即装 / podapp:// 协议
 pods/                      官方程序舱源码 —— 尚未开始
 ```
 
