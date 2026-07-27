@@ -1,0 +1,14 @@
+[package]
+name = "podapp-codex"
+version = "0.1.0"
+description = "只读访问 Codex 的会话记录 —— 以宿主动作形式提供，程序舱沙箱碰不到用户目录"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde_json.workspace = true
+
+[dev-dependencies]
+# 只有集成测试需要运行时：这个 crate 本身不依赖它，保持可被任何宿主单独取用
+podapp-runtime = { path = "../podapp-runtime" }

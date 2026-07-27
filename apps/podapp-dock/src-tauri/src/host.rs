@@ -26,8 +26,13 @@ impl HostBridge for DockHost {
     fn file_open(&self, _f: &[String]) -> Result<Value, String> {
         Err("capability_unavailable: 打开对话框还没接".into())
     }
-    fn host_action(&self, id: &str, _input: Value) -> Result<Value, String> {
-        // 浮舱自己还没有任何宿主动作。九宫格切图要的 `host.zip.pack` 就装在这里。
+    /// 宿主动作。**权限闸在上游**：运行时已经核对过调用方在
+    /// `permissions.host_actions` 里申报了这个 ID，这里不必再查一遍
+    /// —— 查两遍的坏处是两处规则会慢慢不一致。
+    fn host_action(&self, id: &str, input: Value) -> Result<Value, String> {
+        if id.starts_with("host.codex.") {
+            return podapp_codex::host_action(id, input);
+        }
         Err(format!("capability_unavailable: 浮舱没有宿主动作 {id}"))
     }
 }

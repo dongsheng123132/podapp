@@ -2590,9 +2590,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "podapp-codex"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "podapp-dock"
 version = "0.1.0"
 dependencies = [
+ "podapp-codex",
  "podapp-qr",
  "podapp-runtime",
  "podapp-win",

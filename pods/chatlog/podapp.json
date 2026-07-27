@@ -1,0 +1,35 @@
+{
+  "profile": "podapp/pod@0.1",
+  "pod": {
+    "id": "org.podapp.codex.chatlog",
+    "slug": "chatlog",
+    "name": "对话导出",
+    "version": "0.1.0",
+    "summary": "把 Codex 会话导成 Markdown / HTML",
+    "description": "挑一次会话，导成能直接贴进文档或提交进仓库的 Markdown（或 HTML）。系统提示词不会被导出去。也可以把已经导出的 .jsonl 直接拖进来 —— 那条路不依赖 Codex 装在哪、版本是几。",
+    "author": "PodApp",
+    "homepage": "https://podapp.net/pods/chatlog",
+    "license": "MIT",
+    "locales": ["zh-CN"],
+    "min_host_version": "0.1.0"
+  },
+  "action_parity": "./action-parity.json",
+  "package": { "kind": "web", "web": { "root": "web", "entry": "index.html", "actions": "actions.mjs" } },
+  "ui": {
+    "icon": "lucide:file-text",
+    "accent": "#38bdf8",
+    "container": "window",
+    "window": { "width": 940, "height": 700, "resizable": true },
+    "home_dock": true,
+    "quick_actions": [
+      { "action": "app.chatlog.session.export", "label": "导出对话", "icon": "lucide:file-text" }
+    ]
+  },
+  "permissions": {
+    "ai": { "image_generate": false, "image_edit": false, "chat": false, "video_generate": false, "max_calls_per_run": 0 },
+    "fs": { "app_data": true, "save_dialog": false, "open_dialog": false },
+    "net": { "allow": [] },
+    "host_actions": ["host.codex.session.list", "host.codex.session.read"]
+  },
+  "market": { "category": "text", "tags": ["导出", "Markdown", "Codex", "交接文档"] }
+}
