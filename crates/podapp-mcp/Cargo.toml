@@ -1,0 +1,21 @@
+[package]
+name = "podapp-mcp"
+version = "0.1.0"
+description = "把已装程序舱的动作暴露成 MCP 工具 —— 装一个 Pod，任何 MCP 客户端都能调"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "podapp_mcp"
+path = "src/lib.rs"
+
+[[bin]]
+name = "podapp-mcp"
+path = "src/main.rs"
+
+[dependencies]
+podapp-runtime = { path = "../podapp-runtime" }
+# 二维码能力：MCP 这条路要和浮舱看到同一批动词
+podapp-qr = { path = "../podapp-qr" }
+serde_json.workspace = true
