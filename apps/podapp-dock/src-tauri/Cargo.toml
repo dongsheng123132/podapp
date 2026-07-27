@@ -12,7 +12,10 @@ license = "Apache-2.0"
 
 [lib]
 name = "podapp_dock_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+# 只要 rlib。staticlib/cdylib 是给移动端用的，桌面用不上 —— 而它们跟
+# `panic = "abort"` 一起会让 release 构建去找 staticlib 版的 std，
+# 报出来的是 `found staticlib std instead of rlib`，跟真实原因隔着好几层。
+crate-type = ["rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
