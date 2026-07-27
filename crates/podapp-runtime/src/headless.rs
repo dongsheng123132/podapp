@@ -46,7 +46,9 @@ impl HeadlessHost {
     pub fn with_host_actions(
         f: impl Fn(&str, Value) -> Result<Value, String> + Send + Sync + 'static,
     ) -> Self {
-        Self { host_actions: Some(Box::new(f)) }
+        Self {
+            host_actions: Some(Box::new(f)),
+        }
     }
 }
 
@@ -69,7 +71,9 @@ impl HostBridge for HeadlessHost {
     fn host_action(&self, id: &str, input: Value) -> Result<Value, String> {
         match &self.host_actions {
             Some(f) => f(id, input),
-            None => Err(format!("capability_unavailable: 这个宿主没有接动作总线，调不了 {id}")),
+            None => Err(format!(
+                "capability_unavailable: 这个宿主没有接动作总线，调不了 {id}"
+            )),
         }
     }
 }
@@ -84,7 +88,11 @@ pub fn dispatch_capability(
     host: &dyn HostBridge,
 ) -> Result<Value, String> {
     let caps = Capabilities::builtin();
-    let ctx = CapCtx { pod_id, host, execution_id: "" };
+    let ctx = CapCtx {
+        pod_id,
+        host,
+        execution_id: "",
+    };
     caps.dispatch(&ctx, verb, args)
 }
 
@@ -116,11 +124,18 @@ fn find_node() -> Option<PathBuf> {
             return Some(p);
         }
     }
-    let names: &[&str] = if cfg!(windows) { &["node.exe", "node"] } else { &["node"] };
+    let names: &[&str] = if cfg!(windows) {
+        &["node.exe", "node"]
+    } else {
+        &["node"]
+    };
     let portable = crate::home().join("runtime");
     for sub in ["node-win-x64", "node", "node-x64"] {
         for n in names {
-            for c in [portable.join(sub).join(n), portable.join(sub).join("bin").join(n)] {
+            for c in [
+                portable.join(sub).join(n),
+                portable.join(sub).join("bin").join(n),
+            ] {
                 if c.exists() {
                     return Some(c);
                 }
@@ -139,8 +154,10 @@ fn find_node() -> Option<PathBuf> {
         }
     }
     #[cfg(windows)]
-    for base in ["C:\\Program Files\\nodejs\\node.exe", "C:\\Program Files (x86)\\nodejs\\node.exe"]
-    {
+    for base in [
+        "C:\\Program Files\\nodejs\\node.exe",
+        "C:\\Program Files (x86)\\nodejs\\node.exe",
+    ] {
         let p = Path::new(base);
         if p.exists() {
             return Some(p.to_path_buf());
@@ -160,7 +177,12 @@ pub fn run_action_with(
     input: Value,
     host: &dyn HostBridge,
 ) -> Result<Value, String> {
-    invoke(&Invocation::new(action_id, input), host, &Capabilities::builtin(), None)
+    invoke(
+        &Invocation::new(action_id, input),
+        host,
+        &Capabilities::builtin(),
+        None,
+    )
 }
 
 /// 完整形态的调用 —— 影子（手机 / 远端）走这条。
@@ -190,7 +212,10 @@ pub fn invoke(
     let spec = parity
         .get("actions")
         .and_then(|v| v.as_array())
-        .and_then(|a| a.iter().find(|x| x.get("id").and_then(|v| v.as_str()) == Some(action_id)))
+        .and_then(|a| {
+            a.iter()
+                .find(|x| x.get("id").and_then(|v| v.as_str()) == Some(action_id))
+        })
         .ok_or_else(|| format!("unknown_action: {action_id}"))?
         .clone();
 
@@ -198,21 +223,29 @@ pub fn invoke(
     if let Some(s) = spec.get("input_schema") {
         validate_input(s, &input, "input")?;
     }
-    if spec.pointer("/execution/headless").and_then(|v| v.as_bool()) != Some(true) {
+    if spec
+        .pointer("/execution/headless")
+        .and_then(|v| v.as_bool())
+        != Some(true)
+    {
         return Err(format!(
             "not_headless: 动作 {action_id} 声明了 headless=false，只能在界面里用"
         ));
     }
     if m.package.kind != "web" {
-        return Err(format!("not_implemented: {} 形态的无头执行尚未接入", m.package.kind));
+        return Err(format!(
+            "not_implemented: {} 形态的无头执行尚未接入",
+            m.package.kind
+        ));
     }
 
     let w = m.package.web.clone().unwrap_or_default();
     let am = w.actions.clone().ok_or("这个程序舱没有动作模块")?;
     let root = crate::safe_join(&dir, &w.root).ok_or("package.web.root 非法")?;
     let module = crate::safe_join(&root, &am).ok_or("package.web.actions 非法")?;
-    let node = find_node()
-        .ok_or("找不到 Node —— 程序舱的无头执行需要它。装一个系统 Node，或设 PODAPP_NODE 指过去。")?;
+    let node = find_node().ok_or(
+        "找不到 Node —— 程序舱的无头执行需要它。装一个系统 Node，或设 PODAPP_NODE 指过去。",
+    )?;
 
     let tmp = std::env::temp_dir().join(format!("podapp-run-{}", crate::now_ms()));
     std::fs::create_dir_all(&tmp).map_err(|e| e.to_string())?;
@@ -276,7 +309,11 @@ pub fn invoke(
             json!({ "ok": false, "error": format!("quota_exceeded: 本轮最多调用 {max_calls} 次 AI") })
         } else {
             match caps.dispatch(
-                &CapCtx { pod_id: &pod_id, host, execution_id: &inv.execution_id },
+                &CapCtx {
+                    pod_id: &pod_id,
+                    host,
+                    execution_id: &inv.execution_id,
+                },
                 verb,
                 &args,
             ) {
@@ -305,7 +342,11 @@ pub fn invoke(
         crate::invoke::replay_store(&pod_id, inv, &data);
         Ok(data)
     } else {
-        Err(v.get("error").and_then(|x| x.as_str()).unwrap_or("动作执行失败").to_string())
+        Err(v
+            .get("error")
+            .and_then(|x| x.as_str())
+            .unwrap_or("动作执行失败")
+            .to_string())
     }
 }
 
@@ -319,13 +360,19 @@ mod tests {
         // 无人值守时弹「另存为」是错的，必须明确拒绝而不是挂在那里等
         assert!(h.file_save("a", "data:,x").is_err());
         assert!(h.file_open(&[]).is_err());
-        assert!(h.host_action("host.zip.pack", json!({})).is_err(), "没接总线就不该放行");
+        assert!(
+            h.host_action("host.zip.pack", json!({})).is_err(),
+            "没接总线就不该放行"
+        );
     }
 
     #[test]
     fn host_actions_reach_the_injected_bus() {
         let h = HeadlessHost::with_host_actions(|id, _| Ok(json!({ "called": id })));
-        assert_eq!(h.host_action("host.zip.pack", json!({})).unwrap()["called"], "host.zip.pack");
+        assert_eq!(
+            h.host_action("host.zip.pack", json!({})).unwrap()["called"],
+            "host.zip.pack"
+        );
     }
 
     #[test]
@@ -340,7 +387,8 @@ mod tests {
     fn storage_key_cannot_traverse() {
         let h = HeadlessHost::new();
         for bad in ["../escape", "a/b", "a\\b", "with.dot", ""] {
-            let e = dispatch_capability("x", "storage.set", &json!({ "key": bad }), &h).unwrap_err();
+            let e =
+                dispatch_capability("x", "storage.set", &json!({ "key": bad }), &h).unwrap_err();
             // 要么被 key 校验拦下，要么因为 pod 没装而被权限闸拦下 —— 都不能落盘
             assert!(
                 e.contains("invalid_input") || e.contains("permission_denied"),

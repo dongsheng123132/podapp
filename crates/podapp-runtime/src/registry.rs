@@ -61,7 +61,10 @@ pub fn list() -> Vec<PodInfo> {
     let mut seen = vec![];
 
     let lookup = |reg: &Registry, id: &str| {
-        reg.apps.iter().find(|e| e.id == id).map(|e| (e.pinned_home, e.enabled))
+        reg.apps
+            .iter()
+            .find(|e| e.id == id)
+            .map(|e| (e.pinned_home, e.enabled))
     };
 
     if let Ok(rd) = std::fs::read_dir(&root) {

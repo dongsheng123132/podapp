@@ -172,7 +172,9 @@ pub fn emit(
     let file = format!("{id}.{ext}");
     std::fs::write(dir().join(&file), &bytes).map_err(|e| e.to_string())?;
 
-    let (w, h) = png_size(&bytes).map(|(a, b)| (Some(a), Some(b))).unwrap_or((None, None));
+    let (w, h) = png_size(&bytes)
+        .map(|(a, b)| (Some(a), Some(b)))
+        .unwrap_or((None, None));
     let a = Artifact {
         id,
         kind: kind.to_string(),

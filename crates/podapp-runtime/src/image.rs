@@ -89,7 +89,11 @@ fn crc32(buf: &[u8]) -> u32 {
         for (n, e) in t.iter_mut().enumerate() {
             let mut c = n as u32;
             for _ in 0..8 {
-                c = if c & 1 != 0 { 0xedb88320 ^ (c >> 1) } else { c >> 1 };
+                c = if c & 1 != 0 {
+                    0xedb88320 ^ (c >> 1)
+                } else {
+                    c >> 1
+                };
             }
             *e = c;
         }
@@ -151,11 +155,15 @@ pub fn decode_png(b: &[u8]) -> Result<Img, String> {
         let ty = &b[off + 4..off + 8];
         let data = b.get(off + 8..off + 8 + len).ok_or("PNG 数据截断")?;
         match ty {
-            b"IHDR" => ihdr = Some((
-                u32::from_be_bytes([data[0], data[1], data[2], data[3]]),
-                u32::from_be_bytes([data[4], data[5], data[6], data[7]]),
-                data[8], data[9], data[12],
-            )),
+            b"IHDR" => {
+                ihdr = Some((
+                    u32::from_be_bytes([data[0], data[1], data[2], data[3]]),
+                    u32::from_be_bytes([data[4], data[5], data[6], data[7]]),
+                    data[8],
+                    data[9],
+                    data[12],
+                ))
+            }
             b"IDAT" => idat.extend_from_slice(data),
             b"IEND" => break,
             _ => {}
@@ -178,7 +186,9 @@ pub fn decode_png(b: &[u8]) -> Result<Img, String> {
     };
 
     let mut raw = Vec::new();
-    ZlibDecoder::new(&idat[..]).read_to_end(&mut raw).map_err(|e| format!("PNG 解压失败: {e}"))?;
+    ZlibDecoder::new(&idat[..])
+        .read_to_end(&mut raw)
+        .map_err(|e| format!("PNG 解压失败: {e}"))?;
     let stride = w as usize * ch;
     if raw.len() < h as usize * (stride + 1) {
         return Err("PNG 扫描行不完整".into());
@@ -202,7 +212,13 @@ pub fn decode_png(b: &[u8]) -> Result<Img, String> {
                     4 => {
                         let p = a + bb - c;
                         let (pa, pb, pc) = ((p - a).abs(), (p - bb).abs(), (p - c).abs());
-                        if pa <= pb && pa <= pc { a } else if pb <= pc { bb } else { c }
+                        if pa <= pb && pa <= pc {
+                            a
+                        } else if pb <= pc {
+                            bb
+                        } else {
+                            c
+                        }
                     }
                     _ => 0,
                 };
@@ -223,10 +239,15 @@ pub fn decode_png(b: &[u8]) -> Result<Img, String> {
                 px[d..d + 3].copy_from_slice(&out[s..s + 3]);
             }
             2 => {
-                px[d] = out[s]; px[d + 1] = out[s]; px[d + 2] = out[s]; px[d + 3] = out[s + 1];
+                px[d] = out[s];
+                px[d + 1] = out[s];
+                px[d + 2] = out[s];
+                px[d + 3] = out[s + 1];
             }
             _ => {
-                px[d] = out[s]; px[d + 1] = out[s]; px[d + 2] = out[s];
+                px[d] = out[s];
+                px[d + 1] = out[s];
+                px[d + 2] = out[s];
             }
         }
     }
@@ -236,8 +257,14 @@ pub fn decode_png(b: &[u8]) -> Result<Img, String> {
 // ───────────────────────────── ffmpeg 外援 ─────────────────────────────
 
 fn ffmpeg() -> Option<PathBuf> {
-    let names: &[&str] = if cfg!(windows) { &["ffmpeg.exe"] } else { &["ffmpeg"] };
-    let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).unwrap_or_default();
+    let names: &[&str] = if cfg!(windows) {
+        &["ffmpeg.exe"]
+    } else {
+        &["ffmpeg"]
+    };
+    let home = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .unwrap_or_default();
     let mut cands: Vec<PathBuf> = vec![];
     // 先看本宿主自己的工具目录，再看 `.uking` —— 一台机器上装了 U-King 就已经有 ffmpeg 了，
     // 让用户为了同一个二进制再下一次是纯浪费。跨品牌复用工具是有意的，不是漏改。
@@ -294,11 +321,21 @@ const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012
 fn b64_encode(b: &[u8]) -> String {
     let mut out = String::with_capacity(b.len().div_ceil(3) * 4);
     for c in b.chunks(3) {
-        let n = ((c[0] as u32) << 16) | ((*c.get(1).unwrap_or(&0) as u32) << 8) | *c.get(2).unwrap_or(&0) as u32;
+        let n = ((c[0] as u32) << 16)
+            | ((*c.get(1).unwrap_or(&0) as u32) << 8)
+            | *c.get(2).unwrap_or(&0) as u32;
         out.push(B64[(n >> 18) as usize & 63] as char);
         out.push(B64[(n >> 12) as usize & 63] as char);
-        out.push(if c.len() > 1 { B64[(n >> 6) as usize & 63] as char } else { '=' });
-        out.push(if c.len() > 2 { B64[n as usize & 63] as char } else { '=' });
+        out.push(if c.len() > 1 {
+            B64[(n >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        out.push(if c.len() > 2 {
+            B64[n as usize & 63] as char
+        } else {
+            '='
+        });
     }
     out
 }
@@ -330,11 +367,28 @@ fn b64_decode(s: &str) -> Result<Vec<u8>, String> {
 // ───────────────────────────── 像素运算 ─────────────────────────────
 
 fn rect_of(v: &Value, w: u32, h: u32) -> (u32, u32, u32, u32) {
-    let g = |k: &str| v.get(k).and_then(|x| x.as_f64()).unwrap_or(0.0).round().max(0.0) as u32;
-    let (x, y) = (g("x").min(w.saturating_sub(1)), g("y").min(h.saturating_sub(1)));
+    let g = |k: &str| {
+        v.get(k)
+            .and_then(|x| x.as_f64())
+            .unwrap_or(0.0)
+            .round()
+            .max(0.0) as u32
+    };
+    let (x, y) = (
+        g("x").min(w.saturating_sub(1)),
+        g("y").min(h.saturating_sub(1)),
+    );
     let (rw, rh) = (
-        v.get("w").and_then(|x| x.as_f64()).unwrap_or(w as f64).round().max(1.0) as u32,
-        v.get("h").and_then(|x| x.as_f64()).unwrap_or(h as f64).round().max(1.0) as u32,
+        v.get("w")
+            .and_then(|x| x.as_f64())
+            .unwrap_or(w as f64)
+            .round()
+            .max(1.0) as u32,
+        v.get("h")
+            .and_then(|x| x.as_f64())
+            .unwrap_or(h as f64)
+            .round()
+            .max(1.0) as u32,
     );
     (x, y, rw.min(w - x), rh.min(h - y))
 }
@@ -369,7 +423,8 @@ fn resize(src: &Img, tw: u32, th: u32) -> Img {
                 let p = |yy: u32, xx: u32| src.px[((yy * src.w + xx) * 4 + c) as usize] as f32;
                 let top = p(y0, x0) * (1.0 - fx) + p(y0, x1) * fx;
                 let bot = p(y1, x0) * (1.0 - fx) + p(y1, x1) * fx;
-                px[((y * tw + x) * 4 + c) as usize] = (top * (1.0 - fy) + bot * fy).round().clamp(0.0, 255.0) as u8;
+                px[((y * tw + x) * 4 + c) as usize] =
+                    (top * (1.0 - fy) + bot * fy).round().clamp(0.0, 255.0) as u8;
             }
         }
     }
@@ -378,7 +433,11 @@ fn resize(src: &Img, tw: u32, th: u32) -> Img {
 
 /// 环带（rect 之内、inner 之外）的逐通道中位数与最大标准差。
 /// 放在宿主算，而不是把几百万像素塞进 JSON 送去 JS —— 那样慢且撑爆内存。
-fn ring_stats(img: &Img, rect: (u32, u32, u32, u32), inner: (i64, i64, i64, i64)) -> ([u8; 3], f64) {
+fn ring_stats(
+    img: &Img,
+    rect: (u32, u32, u32, u32),
+    inner: (i64, i64, i64, i64),
+) -> ([u8; 3], f64) {
     let (rx, ry, rw, rh) = rect;
     let (ix, iy, iw, ih) = inner;
     let mut ch: [Vec<u8>; 3] = [vec![], vec![], vec![]];
@@ -405,7 +464,8 @@ fn ring_stats(img: &Img, rect: (u32, u32, u32, u32), inner: (i64, i64, i64, i64)
         ch[c].sort_unstable();
         med[c] = ch[c][ch[c].len() / 2];
         let m = ch[c].iter().map(|v| *v as f64).sum::<f64>() / ch[c].len() as f64;
-        let sd = (ch[c].iter().map(|v| (*v as f64 - m).powi(2)).sum::<f64>() / ch[c].len() as f64).sqrt();
+        let sd = (ch[c].iter().map(|v| (*v as f64 - m).powi(2)).sum::<f64>() / ch[c].len() as f64)
+            .sqrt();
         sdmax = sdmax.max(sd);
     }
     (med, sdmax)
@@ -415,7 +475,12 @@ fn ring_stats(img: &Img, rect: (u32, u32, u32, u32), inner: (i64, i64, i64, i64)
 /// **框外每个像素逐字节不变** —— 这是算法保证，靠的就是 alpha 到边界处恰好为 0。
 #[allow(clippy::too_many_arguments)]
 fn composite_feather(
-    base: &Img, patch: &Img, at: (i64, i64), sel: (i64, i64, i64, i64), feather: f64, offset: Option<[f64; 3]>,
+    base: &Img,
+    patch: &Img,
+    at: (i64, i64),
+    sel: (i64, i64, i64, i64),
+    feather: f64,
+    offset: Option<[f64; 3]>,
 ) -> Img {
     let mut out = base.clone();
     let (ax, ay) = at;
@@ -469,9 +534,14 @@ fn warp_perspective(src: &Img, quad: &[(f64, f64); 4], tw: u32, th: u32) -> Img 
     let (a, b, c, d, e, f, g, h);
     if dx3.abs() < 1e-9 && dy3.abs() < 1e-9 {
         // 退化成仿射：拍得很正的时候会走到这里
-        a = x1 - x0; b = x2 - x1; c = x0;
-        d = y1 - y0; e = y2 - y1; f = y0;
-        g = 0.0; h = 0.0;
+        a = x1 - x0;
+        b = x2 - x1;
+        c = x0;
+        d = y1 - y0;
+        e = y2 - y1;
+        f = y0;
+        g = 0.0;
+        h = 0.0;
     } else {
         let den = dx1 * dy2 - dy1 * dx2;
         if den.abs() < 1e-12 {
@@ -480,8 +550,12 @@ fn warp_perspective(src: &Img, quad: &[(f64, f64); 4], tw: u32, th: u32) -> Img 
         }
         g = (dx3 * dy2 - dy3 * dx2) / den;
         h = (dx1 * dy3 - dy1 * dx3) / den;
-        a = x1 - x0 + g * x1; b = x3 - x0 + h * x3; c = x0;
-        d = y1 - y0 + g * y1; e = y3 - y0 + h * y3; f = y0;
+        a = x1 - x0 + g * x1;
+        b = x3 - x0 + h * x3;
+        c = x0;
+        d = y1 - y0 + g * y1;
+        e = y3 - y0 + h * y3;
+        f = y0;
     }
 
     let mut px = vec![0u8; (tw * th * 4) as usize];
@@ -491,7 +565,9 @@ fn warp_perspective(src: &Img, quad: &[(f64, f64); 4], tw: u32, th: u32) -> Img 
         for tx in 0..tw {
             let u = (tx as f64 + 0.5) / tw as f64;
             let w = g * u + h * v + 1.0;
-            if w.abs() < 1e-12 { continue; }
+            if w.abs() < 1e-12 {
+                continue;
+            }
             let sx = (a * u + b * v + c) / w;
             let sy = (d * u + e * v + f) / w;
             // 双线性采样。落在图外的按边缘钳制，不留黑边。
@@ -505,7 +581,8 @@ fn warp_perspective(src: &Img, quad: &[(f64, f64); 4], tw: u32, th: u32) -> Img 
                 let p = |yy: u32, xx: u32| src.px[((yy * src.w + xx) * 4 + ch) as usize] as f64;
                 let top = p(iy, ix) * (1.0 - rx) + p(iy, jx) * rx;
                 let bot = p(jy, ix) * (1.0 - rx) + p(jy, jx) * rx;
-                px[di + ch as usize] = (top * (1.0 - ry) + bot * ry).round().clamp(0.0, 255.0) as u8;
+                px[di + ch as usize] =
+                    (top * (1.0 - ry) + bot * ry).round().clamp(0.0, 255.0) as u8;
             }
         }
     }
@@ -514,7 +591,12 @@ fn warp_perspective(src: &Img, quad: &[(f64, f64); 4], tw: u32, th: u32) -> Img 
 
 fn parse_color(v: &Value) -> [u8; 3] {
     if let Some(a) = v.as_array() {
-        let g = |i: usize| a.get(i).and_then(|x| x.as_f64()).unwrap_or(0.0).clamp(0.0, 255.0) as u8;
+        let g = |i: usize| {
+            a.get(i)
+                .and_then(|x| x.as_f64())
+                .unwrap_or(0.0)
+                .clamp(0.0, 255.0) as u8
+        };
         return [g(0), g(1), g(2)];
     }
     if let Some(s) = v.as_str() {
@@ -533,13 +615,17 @@ fn parse_color(v: &Value) -> [u8; 3] {
 pub fn dispatch(verb: &str, args: &Value) -> Result<Value, String> {
     let a = |i: usize| args.get(i).cloned().unwrap_or(Value::Null);
     let sid = |i: usize| -> Result<String, String> {
-        a(i).as_str().map(String::from).ok_or_else(|| "invalid_input: 缺少图像句柄".into())
+        a(i).as_str()
+            .map(String::from)
+            .ok_or_else(|| "invalid_input: 缺少图像句柄".into())
     };
 
     match verb {
         "decode" => {
             let src = a(0);
-            let s = src.as_str().ok_or("invalid_input: decode 需要 data URL 或路径")?;
+            let s = src
+                .as_str()
+                .ok_or("invalid_input: decode 需要 data URL 或路径")?;
             let bytes = if let Some(i) = s.find(";base64,") {
                 b64_decode(&s[i + 8..])?
             } else if s.starts_with("data:") {
@@ -573,14 +659,20 @@ pub fn dispatch(verb: &str, args: &Value) -> Result<Value, String> {
         }
         "encode" => {
             let img = get(&sid(0)?)?;
-            Ok(json!(format!("data:image/png;base64,{}", b64_encode(&encode_png(&img)))))
+            Ok(json!(format!(
+                "data:image/png;base64,{}",
+                b64_encode(&encode_png(&img))
+            )))
         }
         // 小区域取像素给 JS 自己算（字形检测那种）。大区域走 ringStats，别把几百万像素塞进 JSON。
         "pixels" => {
             let img = get(&sid(0)?)?;
             let (x, y, w, h) = rect_of(&a(1), img.w, img.h);
             if (w as u64) * (h as u64) > 1_048_576 {
-                return Err("invalid_input: 取像素区域过大（>1M 像素）；大区域统计请用 image.ringStats".into());
+                return Err(
+                    "invalid_input: 取像素区域过大（>1M 像素）；大区域统计请用 image.ringStats"
+                        .into(),
+                );
             }
             let sub = crop(&img, x, y, w, h);
             Ok(json!({ "w": w, "h": h, "rgba_b64": b64_encode(&sub.px) }))
@@ -607,7 +699,10 @@ pub fn dispatch(verb: &str, args: &Value) -> Result<Value, String> {
                     let i = ((yy * img.w + xx) * 4) as usize;
                     for k in 0..3 {
                         let n = if noise > 0.5 {
-                            let s = (xx.wrapping_mul(73_856_093) ^ yy.wrapping_mul(19_349_663) ^ (k as u32).wrapping_mul(83_492_791)) as f64;
+                            let s = (xx.wrapping_mul(73_856_093)
+                                ^ yy.wrapping_mul(19_349_663)
+                                ^ (k as u32).wrapping_mul(83_492_791))
+                                as f64;
                             ((s % 1000.0) / 1000.0 - 0.5) * 2.0 * noise
                         } else {
                             0.0
@@ -632,10 +727,12 @@ pub fn dispatch(verb: &str, args: &Value) -> Result<Value, String> {
             });
             let gi = |v: &Value, k: &str| v.get(k).and_then(|x| x.as_f64()).unwrap_or(0.0) as i64;
             let out = composite_feather(
-                &base, &patch,
+                &base,
+                &patch,
                 (gi(&at, "x"), gi(&at, "y")),
                 (gi(&sel, "x"), gi(&sel, "y"), gi(&sel, "w"), gi(&sel, "h")),
-                feather, off,
+                feather,
+                off,
             );
             let id = put(out.clone());
             Ok(handle_json(&id, &out))
@@ -646,7 +743,10 @@ pub fn dispatch(verb: &str, args: &Value) -> Result<Value, String> {
             let pts = a(1);
             let arr = pts.as_array().ok_or("invalid_input: 需要 4 个角点")?;
             if arr.len() != 4 {
-                return Err(format!("invalid_input: 需要恰好 4 个角点，收到 {}", arr.len()));
+                return Err(format!(
+                    "invalid_input: 需要恰好 4 个角点，收到 {}",
+                    arr.len()
+                ));
             }
             let mut quad = [(0.0f64, 0.0f64); 4];
             for (i, p) in arr.iter().enumerate() {
@@ -687,7 +787,10 @@ fn draw_text(id: &str, o: &Value) -> Result<Value, String> {
     let rect = o.get("rect").cloned().unwrap_or(json!({}));
     let (rx, ry, rw, rh) = rect_of(&rect, img.w, img.h);
     let color = o.get("color").map(parse_color).unwrap_or([0, 0, 0]);
-    let fit_h = o.get("fit_height").and_then(|v| v.as_f64()).unwrap_or(rh as f64 * 0.78);
+    let fit_h = o
+        .get("fit_height")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(rh as f64 * 0.78);
     let size = (fit_h * 0.92).round().max(8.0) as u32;
     let align = o.get("align").and_then(|v| v.as_str()).unwrap_or("center");
 
@@ -702,7 +805,12 @@ fn draw_text(id: &str, o: &Value) -> Result<Value, String> {
     std::fs::write(&inp, encode_png(&img)).map_err(|e| e.to_string())?;
 
     // ffmpeg filter 的转义规则很毒：反斜杠、冒号、单引号、百分号都要处理
-    let esc = |s: &str| s.replace('\\', "\\\\").replace(':', "\\:").replace('\'', "\\'").replace('%', "\\%");
+    let esc = |s: &str| {
+        s.replace('\\', "\\\\")
+            .replace(':', "\\:")
+            .replace('\'', "\\'")
+            .replace('%', "\\%")
+    };
     let x_expr = match align {
         "left" => format!("{}", rx + 2),
         "right" => format!("{}-tw-2", rx + rw),
@@ -722,7 +830,9 @@ fn draw_text(id: &str, o: &Value) -> Result<Value, String> {
         .status()
         .map_err(|e| format!("ffmpeg 起不来: {e}"))?;
     let r = if st.success() {
-        std::fs::read(&outp).map_err(|e| e.to_string()).and_then(|b| decode_png(&to_png_bytes(&b)?))
+        std::fs::read(&outp)
+            .map_err(|e| e.to_string())
+            .and_then(|b| decode_png(&to_png_bytes(&b)?))
     } else {
         Err("写字失败（ffmpeg 可能没编进 freetype，装完整版即可）".to_string())
     };
@@ -737,12 +847,21 @@ fn font_file() -> Option<PathBuf> {
     #[cfg(windows)]
     {
         let win = std::env::var("WINDIR").unwrap_or_else(|_| "C:\\Windows".into());
-        for n in ["msyh.ttc", "msyhbd.ttc", "simhei.ttf", "simsun.ttc", "arial.ttf"] {
+        for n in [
+            "msyh.ttc",
+            "msyhbd.ttc",
+            "simhei.ttf",
+            "simsun.ttc",
+            "arial.ttf",
+        ] {
             c.push(Path::new(&win).join("Fonts").join(n));
         }
     }
     #[cfg(target_os = "macos")]
-    for n in ["/System/Library/Fonts/PingFang.ttc", "/System/Library/Fonts/STHeiti Medium.ttc"] {
+    for n in [
+        "/System/Library/Fonts/PingFang.ttc",
+        "/System/Library/Fonts/STHeiti Medium.ttc",
+    ] {
         c.push(PathBuf::from(n));
     }
     #[cfg(target_os = "linux")]

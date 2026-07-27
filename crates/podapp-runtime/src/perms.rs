@@ -59,7 +59,11 @@ pub struct FsPerms {
 
 impl Default for FsPerms {
     fn default() -> Self {
-        Self { app_data: true, save_dialog: false, open_dialog: false }
+        Self {
+            app_data: true,
+            save_dialog: false,
+            open_dialog: false,
+        }
     }
 }
 
@@ -96,7 +100,9 @@ pub enum Cap {
 
 /// 这个程序舱申请过这项能力吗。读不出清单一律当没有 —— 失败要往拒绝那边倒。
 pub fn permits(pod_id: &str, cap: Cap) -> bool {
-    let Ok(p) = crate::manifest::permissions(pod_id) else { return false };
+    let Ok(p) = crate::manifest::permissions(pod_id) else {
+        return false;
+    };
     p.has(cap)
 }
 
@@ -194,7 +200,10 @@ mod tests {
         // 获准的源追加进去，未获准的 http 源必须被忽略（降级到明文是攻击面）
         let p = Perms {
             net: NetPerms {
-                allow: vec!["https://api.example.com/".into(), "http://evil.example".into()],
+                allow: vec![
+                    "https://api.example.com/".into(),
+                    "http://evil.example".into(),
+                ],
             },
             ..Default::default()
         };

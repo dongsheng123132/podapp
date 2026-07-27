@@ -83,8 +83,10 @@ impl Dialect {
     /// `uking-app.json`，意味着两份清单可能说着不同的话，而挑哪份都可能是错的 ——
     /// 静默选一个正是「同一事实存在几份就会漂移几份」的开场。
     pub fn detect(dir: &Path) -> Result<Dialect, String> {
-        let found: Vec<Dialect> =
-            Dialect::all().into_iter().filter(|d| dir.join(d.manifest_file()).exists()).collect();
+        let found: Vec<Dialect> = Dialect::all()
+            .into_iter()
+            .filter(|d| dir.join(d.manifest_file()).exists())
+            .collect();
         match found.as_slice() {
             [one] => Ok(*one),
             [] => Err(format!(
@@ -102,7 +104,9 @@ impl Dialect {
 
     /// 由 `profile` 字段值反查方言。
     pub fn from_profile(profile: &str) -> Option<Dialect> {
-        Dialect::all().into_iter().find(|d| d.profile_const() == profile)
+        Dialect::all()
+            .into_iter()
+            .find(|d| d.profile_const() == profile)
     }
 }
 
@@ -112,8 +116,14 @@ mod tests {
 
     #[test]
     fn profile_constants_are_distinct() {
-        assert_ne!(Dialect::PodApp.profile_const(), Dialect::MiniApp.profile_const());
-        assert_ne!(Dialect::PodApp.manifest_file(), Dialect::MiniApp.manifest_file());
+        assert_ne!(
+            Dialect::PodApp.profile_const(),
+            Dialect::MiniApp.profile_const()
+        );
+        assert_ne!(
+            Dialect::PodApp.manifest_file(),
+            Dialect::MiniApp.manifest_file()
+        );
         assert_ne!(Dialect::PodApp.pkg_ext(), Dialect::MiniApp.pkg_ext());
     }
 

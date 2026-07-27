@@ -64,7 +64,10 @@ fn attr_escape(s: &str) -> String {
 
 /// 桥脚本的服务路径，如 `/__podapp/bridge.js`。宿主的协议处理器认这个路径。
 pub fn script_path() -> String {
-    format!("/__{}/bridge.js", crate::profile().env_prefix.to_ascii_lowercase())
+    format!(
+        "/__{}/bridge.js",
+        crate::profile().env_prefix.to_ascii_lowercase()
+    )
 }
 
 /// 生成注入页面的桥脚本。
@@ -216,7 +219,10 @@ mod tests {
         let s = String::from_utf8(out).unwrap();
         assert_eq!(s.matches("bridge.js").count(), 1, "只能注一次");
         assert!(s.contains("data-pod=\"org.podapp.test\""));
-        assert!(s.find("bridge.js").unwrap() < s.find("<body>").unwrap(), "必须在 body 之前");
+        assert!(
+            s.find("bridge.js").unwrap() < s.find("<body>").unwrap(),
+            "必须在 body 之前"
+        );
     }
 
     #[test]
@@ -246,7 +252,10 @@ mod tests {
         for c in ['"', '<', '>'] {
             assert!(!value.contains(c), "属性值里出现生字符 {c:?}：{value}");
         }
-        assert!(s.contains("&lt;script&gt;"), "危险字符该被转义而不是丢掉：{s}");
+        assert!(
+            s.contains("&lt;script&gt;"),
+            "危险字符该被转义而不是丢掉：{s}"
+        );
         // 页面里仍然只有我们注入的那一个 script 元素
         assert_eq!(s.matches("<script ").count(), 1);
     }
@@ -262,12 +271,19 @@ mod tests {
     fn script_exposes_both_names_and_no_generic_fetch() {
         let js = script();
         assert!(js.contains("window.pod = api"), "规范名");
-        assert!(js.contains(&format!("window.{} = api", crate::profile().bridge_global)), "品牌别名");
+        assert!(
+            js.contains(&format!("window.{} = api", crate::profile().bridge_global)),
+            "品牌别名"
+        );
         for verb in ["artifact", "/rpc/", "image.", "storage.get"] {
             assert!(js.contains(verb), "桥缺少 {verb}");
         }
         // 桥上不该有通用 fetch 出口：唯一的 fetch 是打到自己的 /rpc/ 上
-        assert_eq!(js.matches("fetch(").count(), 1, "桥上只该有一处 fetch，且指向 /rpc/");
+        assert_eq!(
+            js.matches("fetch(").count(),
+            1,
+            "桥上只该有一处 fetch，且指向 /rpc/"
+        );
     }
 
     #[test]

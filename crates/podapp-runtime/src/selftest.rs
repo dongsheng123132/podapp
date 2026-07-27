@@ -32,9 +32,15 @@ fn write_fixture(dir: &Path, d: Dialect) -> std::io::Result<()> {
         "package".into(),
         json!({ "kind": "web", "web": { "root": "web", "entry": "index.html", "actions": "actions.mjs" } }),
     );
-    manifest.insert("ui".into(), json!({ "icon": "lucide:check", "home_dock": false }));
+    manifest.insert(
+        "ui".into(),
+        json!({ "icon": "lucide:check", "home_dock": false }),
+    );
     manifest.insert("permissions".into(), json!({}));
-    std::fs::write(dir.join(d.manifest_file()), Value::Object(manifest).to_string())?;
+    std::fs::write(
+        dir.join(d.manifest_file()),
+        Value::Object(manifest).to_string(),
+    )?;
 
     std::fs::write(
         dir.join("action-parity.json"),
@@ -64,7 +70,10 @@ fn write_fixture(dir: &Path, d: Dialect) -> std::io::Result<()> {
         .to_string(),
     )?;
 
-    std::fs::write(web.join("index.html"), "<!doctype html><meta charset=utf-8><body>selftest")?;
+    std::fs::write(
+        web.join("index.html"),
+        "<!doctype html><meta charset=utf-8><body>selftest",
+    )?;
     std::fs::write(
         web.join("actions.mjs"),
         // 夹具同时扮演「正常程序舱」和「恶意程序舱」：
@@ -99,7 +108,10 @@ pub fn run() -> i32 {
     let sandbox = std::env::temp_dir().join(format!("podapp-selftest-{}", crate::now_ms()));
     let p = crate::profile();
     std::env::set_var(format!("{}_APPS_ROOT", p.env_prefix), &sandbox);
-    std::env::set_var(format!("{}_ARTIFACTS_ROOT", p.env_prefix), sandbox.join("home"));
+    std::env::set_var(
+        format!("{}_ARTIFACTS_ROOT", p.env_prefix),
+        sandbox.join("home"),
+    );
 
     let mut fail = 0;
     {
@@ -107,7 +119,11 @@ pub fn run() -> i32 {
             println!(
                 "{} {what}{}",
                 if ok { "PASS" } else { "FAIL" },
-                if detail.is_empty() { String::new() } else { format!("  ({detail})") }
+                if detail.is_empty() {
+                    String::new()
+                } else {
+                    format!("  ({detail})")
+                }
             );
             if !ok {
                 fail += 1;
@@ -115,7 +131,11 @@ pub fn run() -> i32 {
         };
 
         for d in Dialect::all() {
-            println!("\n── 方言：{} ({}) ──", d.profile_const(), d.manifest_file());
+            println!(
+                "\n── 方言：{} ({}) ──",
+                d.profile_const(),
+                d.manifest_file()
+            );
 
             let src = sandbox.join(format!(".fixture-{}", d.pkg_ext()));
             let _ = std::fs::remove_dir_all(&src);
@@ -132,7 +152,9 @@ pub fn run() -> i32 {
                 format!("{} 个", listed.len()),
             );
             step(
-                crate::manifest::action_specs().iter().any(|a| a.id == "app.selftest.echo.run"),
+                crate::manifest::action_specs()
+                    .iter()
+                    .any(|a| a.id == "app.selftest.echo.run"),
                 "动作已并入宿主动作总线",
                 String::new(),
             );
@@ -151,9 +173,15 @@ pub fn run() -> i32 {
                     let has_ref = art.get("id").and_then(|x| x.as_str()).is_some()
                         && art.get("path").and_then(|x| x.as_str()).is_some();
                     let no_payload = !art.to_string().contains("iVBORw0");
-                    step(has_ref && no_payload, "产物返回引用而非像素", format!("{art}"));
                     step(
-                        crate::artifacts::list().iter().any(|a| a.source == "org.podapp.selftest"),
+                        has_ref && no_payload,
+                        "产物返回引用而非像素",
+                        format!("{art}"),
+                    );
+                    step(
+                        crate::artifacts::list()
+                            .iter()
+                            .any(|a| a.source == "org.podapp.selftest"),
                         "产物进了收件箱",
                         format!("{} 件", crate::artifacts::list().len()),
                     );
@@ -166,8 +194,16 @@ pub fn run() -> i32 {
                     // 这两条一旦回归，「程序舱永远拿不到密钥」就是假话。
                     let esc = v.get("escape").and_then(|x| x.as_str()).unwrap_or("?");
                     let spw = v.get("spawn").and_then(|x| x.as_str()).unwrap_or("?");
-                    step(esc.starts_with("BLOCKED"), "沙箱挡住读用户目录", esc.to_string());
-                    step(spw.starts_with("BLOCKED"), "沙箱挡住起子进程", spw.to_string());
+                    step(
+                        esc.starts_with("BLOCKED"),
+                        "沙箱挡住读用户目录",
+                        esc.to_string(),
+                    );
+                    step(
+                        spw.starts_with("BLOCKED"),
+                        "沙箱挡住起子进程",
+                        spw.to_string(),
+                    );
                 }
                 Err(e) => step(false, "无头执行", e),
             }
@@ -183,7 +219,11 @@ pub fn run() -> i32 {
             );
 
             let served = crate::serve::serve("org.podapp.selftest", "../../../podapp.json");
-            step(served.status != 200, "路径穿越被挡", format!("status={}", served.status));
+            step(
+                served.status != 200,
+                "路径穿越被挡",
+                format!("status={}", served.status),
+            );
 
             // 入口页 + 桥注入。这条一旦坏掉，每个程序舱打开都没有 window.pod，
             // 而界面上只表现为「点了没反应」—— 查起来极费劲。
@@ -220,7 +260,9 @@ pub fn run() -> i32 {
 
             match crate::install::uninstall("org.podapp.selftest", true) {
                 Ok(()) => step(
-                    !crate::registry::list().iter().any(|i| i.id == "org.podapp.selftest"),
+                    !crate::registry::list()
+                        .iter()
+                        .any(|i| i.id == "org.podapp.selftest"),
                     "卸载",
                     String::new(),
                 ),
@@ -230,6 +272,13 @@ pub fn run() -> i32 {
     }
 
     let _ = std::fs::remove_dir_all(&sandbox);
-    println!("\n{}", if fail == 0 { "全部通过".to_string() } else { format!("{fail} 项失败") });
+    println!(
+        "\n{}",
+        if fail == 0 {
+            "全部通过".to_string()
+        } else {
+            format!("{fail} 项失败")
+        }
+    );
     fail
 }

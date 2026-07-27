@@ -39,8 +39,16 @@ impl ActionSpec {
         let id = a.get("id")?.as_str()?.to_string();
         Some(Self {
             id,
-            title: a.get("title").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-            description: a.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            title: a
+                .get("title")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            description: a
+                .get("description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
             effect: a
                 .pointer("/effects/class")
                 .and_then(|v| v.as_str())
@@ -94,7 +102,10 @@ pub fn validate_input(schema: &Value, input: &Value, at: &str) -> Result<(), Str
     }
     if let Some(e) = schema.get("enum").and_then(|v| v.as_array()) {
         if !e.contains(input) {
-            return bad(format!("{at} 必须是 {}", serde_json::to_string(e).unwrap_or_default()));
+            return bad(format!(
+                "{at} 必须是 {}",
+                serde_json::to_string(e).unwrap_or_default()
+            ));
         }
     }
     if let Some(s) = input.as_str() {
@@ -111,15 +122,33 @@ pub fn validate_input(schema: &Value, input: &Value, at: &str) -> Result<(), Str
     }
     if let Some(x) = input.as_f64() {
         for (k, ok) in [
-            ("minimum", x >= schema.get("minimum").and_then(|v| v.as_f64()).unwrap_or(f64::MIN)),
-            ("maximum", x <= schema.get("maximum").and_then(|v| v.as_f64()).unwrap_or(f64::MAX)),
+            (
+                "minimum",
+                x >= schema
+                    .get("minimum")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(f64::MIN),
+            ),
+            (
+                "maximum",
+                x <= schema
+                    .get("maximum")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(f64::MAX),
+            ),
             (
                 "exclusiveMinimum",
-                x > schema.get("exclusiveMinimum").and_then(|v| v.as_f64()).unwrap_or(f64::MIN),
+                x > schema
+                    .get("exclusiveMinimum")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(f64::MIN),
             ),
             (
                 "exclusiveMaximum",
-                x < schema.get("exclusiveMaximum").and_then(|v| v.as_f64()).unwrap_or(f64::MAX),
+                x < schema
+                    .get("exclusiveMaximum")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(f64::MAX),
             ),
         ] {
             if schema.get(k).is_some() && !ok {
@@ -177,7 +206,12 @@ mod tests {
 
     #[test]
     fn accepts_valid_input() {
-        assert!(validate_input(&schema(), &json!({ "n": 3, "tag": "abc", "mode": "a" }), "input").is_ok());
+        assert!(validate_input(
+            &schema(),
+            &json!({ "n": 3, "tag": "abc", "mode": "a" }),
+            "input"
+        )
+        .is_ok());
     }
 
     #[test]
@@ -191,7 +225,10 @@ mod tests {
             (json!({ "n": 1, "tag": "toolong" }), "超长"),
             (json!({ "n": 1, "mode": "z" }), "不在 enum 里"),
         ] {
-            assert!(validate_input(&schema(), &bad, "input").is_err(), "该拒绝：{why}");
+            assert!(
+                validate_input(&schema(), &bad, "input").is_err(),
+                "该拒绝：{why}"
+            );
         }
     }
 

@@ -21,7 +21,10 @@ use serde_json::{json, Value};
 /// 各类权限，以及方言层不认识的 `market` / `$schema`。
 fn full_manifest(d: Dialect) -> Value {
     let mut o = serde_json::Map::new();
-    o.insert("$schema".into(), json!("https://example.invalid/schema.json"));
+    o.insert(
+        "$schema".into(),
+        json!("https://example.invalid/schema.json"),
+    );
     o.insert("profile".into(), json!(d.profile_const()));
     o.insert(
         d.root_key().into(),
@@ -77,7 +80,10 @@ fn full_manifest(d: Dialect) -> Value {
             "host_actions": ["host.zip.pack"]
         }),
     );
-    o.insert("market".into(), json!({ "category": "image", "tags": ["切图", "九宫格"] }));
+    o.insert(
+        "market".into(),
+        json!({ "category": "image", "tags": ["切图", "九宫格"] }),
+    );
     Value::Object(o)
 }
 
@@ -135,7 +141,10 @@ fn unknown_top_level_keys_survive_a_round_trip() {
     let m = Manifest::from_json(&full_manifest(Dialect::MiniApp)).unwrap();
     let out = m.to_json(Dialect::PodApp);
     assert_eq!(out["market"]["category"], "image", "market 段被吃掉了");
-    assert_eq!(out["$schema"], "https://example.invalid/schema.json", "$schema 被吃掉了");
+    assert_eq!(
+        out["$schema"], "https://example.invalid/schema.json",
+        "$schema 被吃掉了"
+    );
 }
 
 #[test]
@@ -175,7 +184,10 @@ fn identity_under_the_wrong_key_is_rejected_not_defaulted() {
     o.insert("app".into(), ident);
 
     let e = Manifest::from_json(&v).unwrap_err();
-    assert!(e.contains("\"pod\""), "错误信息该点明 pod 段缺失，实际: {e}");
+    assert!(
+        e.contains("\"pod\""),
+        "错误信息该点明 pod 段缺失，实际: {e}"
+    );
 }
 
 #[test]
@@ -187,7 +199,13 @@ fn permissions_default_to_deny_in_both_dialects() {
         assert!(!m.permissions.fs.save_dialog, "{d:?}: 另存为必须默认关");
         assert!(m.permissions.fs.app_data, "{d:?}: 自己的沙箱默认可用");
         assert!(m.permissions.net.allow.is_empty(), "{d:?}: 默认出不了网");
-        assert!(m.permissions.host_actions.is_empty(), "{d:?}: 默认调不了宿主动作");
-        assert_eq!(m.permissions.ai.max_calls_per_run, 4, "{d:?}: AI 次数上限默认值不一致");
+        assert!(
+            m.permissions.host_actions.is_empty(),
+            "{d:?}: 默认调不了宿主动作"
+        );
+        assert_eq!(
+            m.permissions.ai.max_calls_per_run, 4,
+            "{d:?}: AI 次数上限默认值不一致"
+        );
     }
 }

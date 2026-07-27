@@ -81,7 +81,9 @@ const REPLAY_MAX: usize = 256;
 static REPLAY: Mutex<Option<ReplayCache>> = Mutex::new(None);
 
 fn replay_key(pod_id: &str, inv: &Invocation) -> Option<String> {
-    inv.idempotency_key.as_ref().map(|k| format!("{pod_id}\u{1}{}\u{1}{k}", inv.action_id))
+    inv.idempotency_key
+        .as_ref()
+        .map(|k| format!("{pod_id}\u{1}{}\u{1}{k}", inv.action_id))
 }
 
 pub(crate) fn replay_lookup(pod_id: &str, inv: &Invocation) -> Option<Value> {
@@ -90,7 +92,9 @@ pub(crate) fn replay_lookup(pod_id: &str, inv: &Invocation) -> Option<Value> {
 }
 
 pub(crate) fn replay_store(pod_id: &str, inv: &Invocation, out: &Value) {
-    let Some(k) = replay_key(pod_id, inv) else { return };
+    let Some(k) = replay_key(pod_id, inv) else {
+        return;
+    };
     let Ok(mut g) = REPLAY.lock() else { return };
     let (order, map) = g.get_or_insert_with(|| (Vec::new(), HashMap::new()));
     if map.insert(k.clone(), out.clone()).is_none() {
@@ -170,7 +174,10 @@ mod tests {
         let inv = Invocation::new("app.x.y.z", json!({})).with_expected_state_version("v1");
         let e = guard("p", &inv, Some(&Fixed("v2"))).unwrap_err();
         assert!(e.starts_with("conflict:"), "实际: {e}");
-        assert!(e.contains("execution_id="), "冲突信息该带关联 ID，否则查不到是哪一次");
+        assert!(
+            e.contains("execution_id="),
+            "冲突信息该带关联 ID，否则查不到是哪一次"
+        );
     }
 
     #[test]
@@ -200,19 +207,31 @@ mod tests {
         replay_store("pod-a", &inv, &json!({ "done": true }));
 
         // 重试（比如影子那边网断了重发）：返回上次结果，不再执行
-        let retry = Invocation::new("app.x.replay.run", json!({ "n": 1 })).with_idempotency_key("k1");
-        assert_eq!(guard("pod-a", &retry, None).unwrap(), Some(json!({ "done": true })));
+        let retry =
+            Invocation::new("app.x.replay.run", json!({ "n": 1 })).with_idempotency_key("k1");
+        assert_eq!(
+            guard("pod-a", &retry, None).unwrap(),
+            Some(json!({ "done": true }))
+        );
 
         // 换个键 / 换个程序舱 / 换个动作，都是另一次调用
         let other_key = Invocation::new("app.x.replay.run", json!({})).with_idempotency_key("k2");
         assert_eq!(guard("pod-a", &other_key, None).unwrap(), None);
-        assert_eq!(guard("pod-b", &retry, None).unwrap(), None, "别的程序舱不该命中");
+        assert_eq!(
+            guard("pod-b", &retry, None).unwrap(),
+            None,
+            "别的程序舱不该命中"
+        );
     }
 
     #[test]
     fn no_key_means_no_replay() {
         let inv = Invocation::new("app.x.nokey.run", json!({}));
         replay_store("pod-a", &inv, &json!({ "done": true }));
-        assert_eq!(guard("pod-a", &inv, None).unwrap(), None, "没给键就不该被当成重放");
+        assert_eq!(
+            guard("pod-a", &inv, None).unwrap(),
+            None,
+            "没给键就不该被当成重放"
+        );
     }
 }

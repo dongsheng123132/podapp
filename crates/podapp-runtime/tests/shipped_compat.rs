@@ -15,7 +15,9 @@ use serde_json::Value;
 use std::path::PathBuf;
 
 fn fixture_dir(name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures").join(name)
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures")
+        .join(name)
 }
 
 const SHIPPED: [&str; 3] = ["idcard", "imagefix", "resize"];
@@ -65,7 +67,10 @@ fn imagefix_keeps_the_details_that_make_it_work() {
     assert_eq!(m.ident.id, "org.uking.app.imagefix");
     assert_eq!(m.ident.slug, "imagefix");
 
-    assert!(m.permissions.ai.image_edit, "去水印靠 AI 改图，这个权限不能丢");
+    assert!(
+        m.permissions.ai.image_edit,
+        "去水印靠 AI 改图，这个权限不能丢"
+    );
     assert!(!m.permissions.ai.image_generate, "它没申请生成图片，别多给");
     assert_eq!(m.permissions.ai.max_calls_per_run, 3, "额度上限被读错了");
     assert!(m.permissions.fs.save_dialog && m.permissions.fs.open_dialog);
@@ -73,13 +78,19 @@ fn imagefix_keeps_the_details_that_make_it_work() {
 
     assert_eq!(m.ui.container, "both");
     assert_eq!(m.ui.quick_actions.len(), 2, "去水印 + 改文字两个快捷入口");
-    let an = m.ui.annotation.as_ref().expect("annotation 段丢了 —— 拖框去水印全靠它");
+    let an =
+        m.ui.annotation
+            .as_ref()
+            .expect("annotation 段丢了 —— 拖框去水印全靠它");
     assert_eq!(an.kind, "rect");
     assert_eq!(an.target_field, "region");
     assert_eq!(an.image_field.as_deref(), Some("image"));
 
     // 方言层不认识的 market 段也要原样留着
-    assert_eq!(m.extra.get("market").and_then(|v| v.get("category")), Some(&serde_json::json!("image")));
+    assert_eq!(
+        m.extra.get("market").and_then(|v| v.get("category")),
+        Some(&serde_json::json!("image"))
+    );
 }
 
 #[test]
@@ -90,7 +101,11 @@ fn shipped_action_ids_stay_in_their_namespace() {
         let p = fixture_dir(name).join("action-parity.json");
         let parity: Value = serde_json::from_str(&std::fs::read_to_string(&p).unwrap()).unwrap();
 
-        assert_eq!(parity["application"]["id"], m.ident.id.as_str(), "{name}: 两份清单身份对不上");
+        assert_eq!(
+            parity["application"]["id"],
+            m.ident.id.as_str(),
+            "{name}: 两份清单身份对不上"
+        );
         assert_eq!(parity["application"]["version"], m.ident.version.as_str());
 
         let actions = parity["actions"].as_array().expect("actions 该是数组");

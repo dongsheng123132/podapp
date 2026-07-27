@@ -92,7 +92,9 @@ impl Capabilities {
         };
         if let Some(cap) = c.required(verb) {
             if !crate::perms::permits(ctx.pod_id, cap) {
-                return Err(format!("permission_denied: 这个程序舱没有申请 {verb} 需要的权限"));
+                return Err(format!(
+                    "permission_denied: 这个程序舱没有申请 {verb} 需要的权限"
+                ));
             }
         }
         c.call(ctx, verb, args)
@@ -140,7 +142,11 @@ impl Capability for FileCap {
         matches!(v, "file.save" | "file.open")
     }
     fn required(&self, v: &str) -> Option<Cap> {
-        Some(if v == "file.save" { Cap::FsSaveDialog } else { Cap::FsOpenDialog })
+        Some(if v == "file.save" {
+            Cap::FsSaveDialog
+        } else {
+            Cap::FsOpenDialog
+        })
     }
     fn call(&self, ctx: &CapCtx, v: &str, a: &Value) -> Result<Value, String> {
         if v == "file.save" {
@@ -152,7 +158,11 @@ impl Capability for FileCap {
             let f: Vec<String> = a
                 .get("filters")
                 .and_then(|x| x.as_array())
-                .map(|arr| arr.iter().filter_map(|x| x.as_str().map(String::from)).collect())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|x| x.as_str().map(String::from))
+                        .collect()
+                })
                 .unwrap_or_default();
             ctx.host.file_open(&f)
         }
@@ -266,7 +276,9 @@ impl Capability for HostActionCap {
             .map(|p| p.host_actions.iter().any(|h| h == id))
             .unwrap_or(false);
         if !allowed {
-            return Err(format!("permission_denied: 这个程序舱没有申请调用宿主动作 {id}"));
+            return Err(format!(
+                "permission_denied: 这个程序舱没有申请调用宿主动作 {id}"
+            ));
         }
         ctx.host.host_action(id, input)
     }
@@ -311,7 +323,11 @@ mod tests {
     }
 
     fn ctx<'a>(host: &'a HeadlessHost, id: &'a str) -> CapCtx<'a> {
-        CapCtx { pod_id: id, host, execution_id: "exec-test" }
+        CapCtx {
+            pod_id: id,
+            host,
+            execution_id: "exec-test",
+        }
     }
 
     #[test]
@@ -319,7 +335,9 @@ mod tests {
         // 这条测试就是「可插拔」的定义：加能力不改运行时
         let caps = Capabilities::builtin().with(Open);
         let h = HeadlessHost::new();
-        let out = caps.dispatch(&ctx(&h, "any"), "open.ping", &json!({})).unwrap();
+        let out = caps
+            .dispatch(&ctx(&h, "any"), "open.ping", &json!({}))
+            .unwrap();
         assert_eq!(out["exec"], "exec-test", "关联 ID 该传到能力里");
         assert!(caps.names().contains(&"open"));
     }
@@ -330,7 +348,9 @@ mod tests {
         // 这正是从 match 换成注册表要买的东西：提供方没有放行的权力。
         let caps = Capabilities::builtin().with(Probe);
         let h = HeadlessHost::new();
-        let e = caps.dispatch(&ctx(&h, "not-installed"), "probe.anything", &json!({})).unwrap_err();
+        let e = caps
+            .dispatch(&ctx(&h, "not-installed"), "probe.anything", &json!({}))
+            .unwrap_err();
         assert!(e.starts_with("permission_denied"), "实际: {e}");
     }
 
@@ -353,14 +373,20 @@ mod tests {
         }
         let caps = Capabilities::builtin().with(Hijack);
         let h = HeadlessHost::new();
-        assert_eq!(caps.dispatch(&ctx(&h, "x"), "image.decode", &json!([])).unwrap(), "hijacked");
+        assert_eq!(
+            caps.dispatch(&ctx(&h, "x"), "image.decode", &json!([]))
+                .unwrap(),
+            "hijacked"
+        );
     }
 
     #[test]
     fn unknown_verbs_are_rejected_not_ignored() {
         let caps = Capabilities::builtin();
         let h = HeadlessHost::new();
-        let e = caps.dispatch(&ctx(&h, "x"), "totally.made.up", &json!({})).unwrap_err();
+        let e = caps
+            .dispatch(&ctx(&h, "x"), "totally.made.up", &json!({}))
+            .unwrap_err();
         assert!(e.starts_with("unknown_capability"), "实际: {e}");
     }
 
@@ -369,8 +395,17 @@ mod tests {
         // 极小面宿主：连内置能力都不给。此时任何动词都该被拒，而不是意外放行。
         let caps = Capabilities::none();
         let h = HeadlessHost::new();
-        for v in ["ai.chat", "file.save", "storage.get", "artifact.emit", "image.decode"] {
-            assert!(caps.dispatch(&ctx(&h, "x"), v, &json!({})).is_err(), "{v} 该被拒");
+        for v in [
+            "ai.chat",
+            "file.save",
+            "storage.get",
+            "artifact.emit",
+            "image.decode",
+        ] {
+            assert!(
+                caps.dispatch(&ctx(&h, "x"), v, &json!({})).is_err(),
+                "{v} 该被拒"
+            );
         }
     }
 
@@ -382,8 +417,16 @@ mod tests {
         let no_perm_needed = ["artifact.emit", "image.", "action"];
         for c in &caps.items {
             for v in [
-                "ai.chat", "ai.image_edit", "ai.image_generate", "file.save", "file.open",
-                "storage.get", "storage.set", "artifact.emit", "image.decode", "action",
+                "ai.chat",
+                "ai.image_edit",
+                "ai.image_generate",
+                "file.save",
+                "file.open",
+                "storage.get",
+                "storage.set",
+                "artifact.emit",
+                "image.decode",
+                "action",
             ] {
                 if c.handles(v) && c.required(v).is_none() {
                     assert!(

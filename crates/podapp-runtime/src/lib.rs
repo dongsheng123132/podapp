@@ -118,7 +118,10 @@ impl HostProfile {
 
     /// PodApp 宿主档案。
     pub fn podapp(host_version: impl Into<String>) -> Self {
-        Self { host_version: host_version.into(), ..Default::default() }
+        Self {
+            host_version: host_version.into(),
+            ..Default::default()
+        }
     }
 }
 
@@ -183,7 +186,10 @@ pub(crate) fn now_ms() -> i64 {
 /// 半开区间的版本比较：`a < b`。只看前三段，预发布后缀忽略。
 pub(crate) fn version_lt(a: &str, b: &str) -> bool {
     let p = |s: &str| -> Vec<u32> {
-        s.split(['.', '-', '+']).take(3).map(|x| x.parse().unwrap_or(0)).collect()
+        s.split(['.', '-', '+'])
+            .take(3)
+            .map(|x| x.parse().unwrap_or(0))
+            .collect()
     };
     let (x, y) = (p(a), p(b));
     for i in 0..3 {

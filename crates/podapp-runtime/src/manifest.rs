@@ -193,10 +193,9 @@ impl Manifest {
         let ident: PodIdent = serde_json::from_value(ident_v.clone())
             .map_err(|e| format!("\"{root}\" 段解析失败: {e}"))?;
 
-        let package: Package = serde_json::from_value(
-            v.get("package").cloned().ok_or("清单缺少 package 段")?,
-        )
-        .map_err(|e| format!("package 段解析失败: {e}"))?;
+        let package: Package =
+            serde_json::from_value(v.get("package").cloned().ok_or("清单缺少 package 段")?)
+                .map_err(|e| format!("package 段解析失败: {e}"))?;
 
         let ui: Ui = serde_json::from_value(v.get("ui").cloned().ok_or("清单缺少 ui 段")?)
             .map_err(|e| format!("ui 段解析失败: {e}"))?;
@@ -219,7 +218,10 @@ impl Manifest {
         Ok(Self {
             dialect,
             ident,
-            action_parity: v.get("action_parity").and_then(|x| x.as_str()).map(String::from),
+            action_parity: v
+                .get("action_parity")
+                .and_then(|x| x.as_str())
+                .map(String::from),
             package,
             ui,
             permissions,
@@ -234,12 +236,21 @@ impl Manifest {
     pub fn to_json(&self, d: Dialect) -> Value {
         let mut o = serde_json::Map::new();
         o.insert("profile".into(), json!(d.profile_const()));
-        o.insert(d.root_key().into(), serde_json::to_value(&self.ident).unwrap_or(Value::Null));
+        o.insert(
+            d.root_key().into(),
+            serde_json::to_value(&self.ident).unwrap_or(Value::Null),
+        );
         if let Some(ap) = &self.action_parity {
             o.insert("action_parity".into(), json!(ap));
         }
-        o.insert("package".into(), serde_json::to_value(&self.package).unwrap_or(Value::Null));
-        o.insert("ui".into(), serde_json::to_value(&self.ui).unwrap_or(Value::Null));
+        o.insert(
+            "package".into(),
+            serde_json::to_value(&self.package).unwrap_or(Value::Null),
+        );
+        o.insert(
+            "ui".into(),
+            serde_json::to_value(&self.ui).unwrap_or(Value::Null),
+        );
         o.insert(
             "permissions".into(),
             serde_json::to_value(&self.permissions).unwrap_or(Value::Null),
@@ -252,7 +263,10 @@ impl Manifest {
 
     /// 换一种方言的同一份清单。
     pub fn translated(&self, d: Dialect) -> Self {
-        Self { dialect: d, ..self.clone() }
+        Self {
+            dialect: d,
+            ..self.clone()
+        }
     }
 }
 
@@ -261,7 +275,9 @@ impl Manifest {
 pub fn valid_pod_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 128
-        && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-')
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-')
         && !id.starts_with('.')
 }
 
@@ -269,7 +285,8 @@ fn valid_slug(s: &str) -> bool {
     let b = s.as_bytes();
     (2..=24).contains(&b.len())
         && b[0].is_ascii_lowercase()
-        && b.iter().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'-')
+        && b.iter()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'-')
 }
 
 /// 动作 ID 形如 `app.<slug>.<域>.<动词>`。
@@ -302,7 +319,10 @@ fn valid_action_id(id: &str, slug: &str) -> bool {
 /// 那种事该走大版本。所以：0.x 一律收，1.0 之后再谈。
 fn spec_version_ok(v: &str) -> bool {
     let mut it = v.split('.');
-    matches!((it.next().and_then(|s| s.parse::<u32>().ok()), it.next()), (Some(0), Some(_)))
+    matches!(
+        (it.next().and_then(|s| s.parse::<u32>().ok()), it.next()),
+        (Some(0), Some(_))
+    )
 }
 
 // ───────────────────────────── 装载与校验 ─────────────────────────────
@@ -334,20 +354,29 @@ pub fn load_dir(dir: &Path) -> Result<(Manifest, Value), String> {
         ));
     }
 
-    let rel = m.action_parity.clone().unwrap_or_else(|| "./action-parity.json".into());
-    let ppath = crate::safe_join(dir, rel.trim_start_matches("./")).ok_or("action_parity 路径非法")?;
+    let rel = m
+        .action_parity
+        .clone()
+        .unwrap_or_else(|| "./action-parity.json".into());
+    let ppath =
+        crate::safe_join(dir, rel.trim_start_matches("./")).ok_or("action_parity 路径非法")?;
     let ptext = std::fs::read_to_string(&ppath).map_err(|e| format!("读不到 {rel}: {e}"))?;
-    let parity: Value =
-        serde_json::from_str(&ptext).map_err(|e| format!("{rel} 解析失败: {e}"))?;
+    let parity: Value = serde_json::from_str(&ptext).map_err(|e| format!("{rel} 解析失败: {e}"))?;
 
-    let sv = parity.get("spec_version").and_then(|v| v.as_str()).unwrap_or("");
+    let sv = parity
+        .get("spec_version")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     if !spec_version_ok(sv) {
         return Err(format!(
             "这个{}用的是 ActionParity {sv}，当前宿主只吃 0.x —— 升级宿主试试",
             dialect.label()
         ));
     }
-    let pid = parity.pointer("/application/id").and_then(|v| v.as_str()).unwrap_or("");
+    let pid = parity
+        .pointer("/application/id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     if pid != m.ident.id {
         return Err(format!(
             "身份不一致: {}={} action-parity.json={pid}",
@@ -355,7 +384,10 @@ pub fn load_dir(dir: &Path) -> Result<(Manifest, Value), String> {
             m.ident.id
         ));
     }
-    let pver = parity.pointer("/application/version").and_then(|v| v.as_str()).unwrap_or("");
+    let pver = parity
+        .pointer("/application/version")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     if pver != m.ident.version {
         return Err(format!(
             "版本不一致: {}={} action-parity.json={pver}",
@@ -364,7 +396,11 @@ pub fn load_dir(dir: &Path) -> Result<(Manifest, Value), String> {
         ));
     }
 
-    let acts = parity.get("actions").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+    let acts = parity
+        .get("actions")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
     if acts.is_empty() {
         return Err("action-parity.json 里一个动作都没有".into());
     }
@@ -372,7 +408,10 @@ pub fn load_dir(dir: &Path) -> Result<(Manifest, Value), String> {
     for a in &acts {
         let id = a.get("id").and_then(|v| v.as_str()).unwrap_or("");
         if !valid_action_id(id, &m.ident.slug) {
-            return Err(format!("动作 \"{id}\" 不在命名空间 app.{}. 内", m.ident.slug));
+            return Err(format!(
+                "动作 \"{id}\" 不在命名空间 app.{}. 内",
+                m.ident.slug
+            ));
         }
         if a.pointer("/execution/headless").and_then(|v| v.as_bool()) == Some(true) {
             any_headless = true;
@@ -382,29 +421,53 @@ pub fn load_dir(dir: &Path) -> Result<(Manifest, Value), String> {
     // 无头实现必须真实存在，否则 CLI/MCP/影核那三个面全是空头支票
     match m.package.kind.as_str() {
         "web" => {
-            let w = m.package.web.clone().ok_or("package.kind=web 但缺 package.web")?;
+            let w = m
+                .package
+                .web
+                .clone()
+                .ok_or("package.kind=web 但缺 package.web")?;
             let root = crate::safe_join(dir, &w.root).ok_or("package.web.root 路径非法")?;
-            if !crate::safe_join(&root, &w.entry).map(|p| p.exists()).unwrap_or(false) {
+            if !crate::safe_join(&root, &w.entry)
+                .map(|p| p.exists())
+                .unwrap_or(false)
+            {
                 return Err(format!("入口文件不存在: {}/{}", w.root, w.entry));
             }
             if any_headless {
                 let am = w.actions.clone().ok_or(
                     "有动作声明 headless=true，但 package.web.actions 没填 —— 无头调用时没有实现可跑",
                 )?;
-                if !crate::safe_join(&root, &am).map(|p| p.exists()).unwrap_or(false) {
+                if !crate::safe_join(&root, &am)
+                    .map(|p| p.exists())
+                    .unwrap_or(false)
+                {
                     return Err(format!("动作模块不存在: {}/{am}", w.root));
                 }
             }
         }
         "script" => {
-            let s = m.package.script.clone().ok_or("package.kind=script 但缺 package.script")?;
-            if !crate::safe_join(dir, &s.skill_dir).map(|p| p.exists()).unwrap_or(false) {
+            let s = m
+                .package
+                .script
+                .clone()
+                .ok_or("package.kind=script 但缺 package.script")?;
+            if !crate::safe_join(dir, &s.skill_dir)
+                .map(|p| p.exists())
+                .unwrap_or(false)
+            {
                 return Err(format!("skill 目录不存在: {}", s.skill_dir));
             }
         }
         "native" => {
-            let n = m.package.native.clone().ok_or("package.kind=native 但缺 package.native")?;
-            if !crate::safe_join(dir, &n.exe).map(|p| p.exists()).unwrap_or(false) {
+            let n = m
+                .package
+                .native
+                .clone()
+                .ok_or("package.kind=native 但缺 package.native")?;
+            if !crate::safe_join(dir, &n.exe)
+                .map(|p| p.exists())
+                .unwrap_or(false)
+            {
                 return Err(format!("可执行文件不存在: {}", n.exe));
             }
         }
@@ -412,13 +475,18 @@ pub fn load_dir(dir: &Path) -> Result<(Manifest, Value), String> {
     }
 
     if !m.ui.icon.starts_with("lucide:")
-        && !crate::safe_join(dir, &m.ui.icon).map(|p| p.exists()).unwrap_or(false)
+        && !crate::safe_join(dir, &m.ui.icon)
+            .map(|p| p.exists())
+            .unwrap_or(false)
     {
         return Err(format!("图标文件不存在: {}", m.ui.icon));
     }
 
     // 引用完整性：界面上点得到的东西必须真的存在
-    let ids: Vec<&str> = acts.iter().filter_map(|a| a.get("id").and_then(|v| v.as_str())).collect();
+    let ids: Vec<&str> = acts
+        .iter()
+        .filter_map(|a| a.get("id").and_then(|v| v.as_str()))
+        .collect();
     for q in &m.ui.quick_actions {
         if !ids.contains(&q.action.as_str()) {
             return Err(format!("ui.quick_actions 引用了不存在的动作 {}", q.action));
@@ -441,7 +509,10 @@ pub fn load_dir(dir: &Path) -> Result<(Manifest, Value), String> {
     if let Some(min) = &m.ident.min_host_version {
         let host = &crate::profile().host_version;
         if crate::version_lt(host, min) {
-            return Err(format!("这个{}需要宿主 {min} 或更新，当前是 {host}", dialect.label()));
+            return Err(format!(
+                "这个{}需要宿主 {min} 或更新，当前是 {host}",
+                dialect.label()
+            ));
         }
     }
 
@@ -455,7 +526,10 @@ pub fn load_dir(dir: &Path) -> Result<(Manifest, Value), String> {
 /// 比对的是**整个目录名**而不是字符串后缀 —— `Path::ends_with` 按路径分量匹配，
 /// 写成那样容易被读成「以 .dev 结尾的扩展名」，所以这里写明白。
 pub(crate) fn is_dev_dir(dir: &Path) -> bool {
-    dir.parent().and_then(|p| p.file_name()).map(|n| n == ".dev").unwrap_or(false)
+    dir.parent()
+        .and_then(|p| p.file_name())
+        .map(|n| n == ".dev")
+        .unwrap_or(false)
 }
 
 /// 正式安装目录优先，其次开发态目录。
@@ -463,8 +537,11 @@ pub(crate) fn resolve_dir(id: &str) -> Option<PathBuf> {
     if !valid_pod_id(id) {
         return None;
     }
-    let has_manifest =
-        |d: &Path| Dialect::all().iter().any(|dl| d.join(dl.manifest_file()).exists());
+    let has_manifest = |d: &Path| {
+        Dialect::all()
+            .iter()
+            .any(|dl| d.join(dl.manifest_file()).exists())
+    };
     let a = crate::apps_root().join(id);
     if has_manifest(&a) {
         return Some(a);
@@ -473,13 +550,20 @@ pub(crate) fn resolve_dir(id: &str) -> Option<PathBuf> {
     has_manifest(&d).then_some(d)
 }
 
-pub fn info_of(dir: &Path, pinned: Option<bool>, enabled: Option<bool>, dev: bool) -> Option<PodInfo> {
+pub fn info_of(
+    dir: &Path,
+    pinned: Option<bool>,
+    enabled: Option<bool>,
+    dev: bool,
+) -> Option<PodInfo> {
     let (m, parity) = load_dir(dir).ok()?;
     let actions = parity
         .get("actions")
         .and_then(|v| v.as_array())
         .map(|a| {
-            a.iter().filter_map(|x| x.get("id").and_then(|v| v.as_str()).map(String::from)).collect()
+            a.iter()
+                .filter_map(|x| x.get("id").and_then(|v| v.as_str()).map(String::from))
+                .collect()
         })
         .unwrap_or_default();
     Some(PodInfo {
@@ -530,7 +614,10 @@ pub fn permissions(id: &str) -> Result<Perms, String> {
 /// 由动作 ID 反查它属于哪个程序舱。
 pub fn owner_of(action_id: &str) -> Option<String> {
     let slug = action_id.strip_prefix("app.")?.split('.').next()?;
-    crate::registry::list().into_iter().find(|i| i.slug == slug).map(|i| i.id)
+    crate::registry::list()
+        .into_iter()
+        .find(|i| i.slug == slug)
+        .map(|i| i.id)
 }
 
 /// 把所有已装程序舱的动作摊平成 [`crate::ActionSpec`]，并进宿主动作总线。
@@ -540,8 +627,12 @@ pub fn action_specs() -> Vec<crate::ActionSpec> {
         if !i.enabled {
             continue;
         }
-        let Ok(parity) = parity_of(&i.id) else { continue };
-        let Some(acts) = parity.get("actions").and_then(|v| v.as_array()) else { continue };
+        let Ok(parity) = parity_of(&i.id) else {
+            continue;
+        };
+        let Some(acts) = parity.get("actions").and_then(|v| v.as_array()) else {
+            continue;
+        };
         out.extend(acts.iter().filter_map(crate::ActionSpec::from_parity));
     }
     out
@@ -576,7 +667,10 @@ mod tests {
     #[test]
     fn spec_version_accepts_all_of_0x() {
         for v in ["0.1.0", "0.3.0", "0.5.0", "0.99.1"] {
-            assert!(spec_version_ok(v), "{v} 该被接受 —— 上游加字段不能让老包失效");
+            assert!(
+                spec_version_ok(v),
+                "{v} 该被接受 —— 上游加字段不能让老包失效"
+            );
         }
         for v in ["1.0.0", "", "abc"] {
             assert!(!spec_version_ok(v));

@@ -59,7 +59,10 @@ fn extract_targz(bytes: &[u8], dest: &Path) -> Result<(), String> {
         if kind.is_symlink() || kind.is_hard_link() {
             return Err("包里含符号/硬链接，拒绝安装".into());
         }
-        let path = e.path().map_err(|_| "条目路径非法".to_string())?.to_path_buf();
+        let path = e
+            .path()
+            .map_err(|_| "条目路径非法".to_string())?
+            .to_path_buf();
         let rel = path.to_string_lossy().replace('\\', "/");
         if rel.starts_with('/') || rel.contains("..") || rel.contains(':') {
             return Err(format!("条目路径越界: {rel}"));
@@ -80,7 +83,10 @@ fn extract_targz(bytes: &[u8], dest: &Path) -> Result<(), String> {
         }
         total += size;
         if total > MAX_TOTAL {
-            return Err(format!("解压总量超限（上限 {}MB）", MAX_TOTAL / 1024 / 1024));
+            return Err(format!(
+                "解压总量超限（上限 {}MB）",
+                MAX_TOTAL / 1024 / 1024
+            ));
         }
         if let Some(p) = out.parent() {
             std::fs::create_dir_all(p).map_err(|e| e.to_string())?;
@@ -94,7 +100,10 @@ fn extract_targz(bytes: &[u8], dest: &Path) -> Result<(), String> {
 
 fn copy_tree(from: &Path, to: &Path, kind: &str, budget: &mut (usize, u64)) -> Result<(), String> {
     std::fs::create_dir_all(to).map_err(|e| e.to_string())?;
-    for e in std::fs::read_dir(from).map_err(|e| e.to_string())?.flatten() {
+    for e in std::fs::read_dir(from)
+        .map_err(|e| e.to_string())?
+        .flatten()
+    {
         let name = e.file_name().to_string_lossy().to_string();
         if name.starts_with('.') || name == "node_modules" {
             continue;
@@ -143,7 +152,11 @@ pub fn install_from_path(src: &Path, source_label: &str) -> Result<PodInfo, Stri
             .map_err(|e| format!("读不到 {}: {e}", dialect.manifest_file()))?;
         let kind = serde_json::from_str::<Value>(&probe)
             .ok()
-            .and_then(|v| v.pointer("/package/kind").and_then(|k| k.as_str()).map(String::from))
+            .and_then(|v| {
+                v.pointer("/package/kind")
+                    .and_then(|k| k.as_str())
+                    .map(String::from)
+            })
             .unwrap_or_else(|| "web".into());
         let mut budget = (0usize, 0u64);
         copy_tree(src, &stage, &kind, &mut budget)?;
