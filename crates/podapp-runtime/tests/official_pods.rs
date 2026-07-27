@@ -178,3 +178,83 @@ fn a_gap_wider_than_the_image_is_refused_with_a_usable_message() {
         assert!(e.contains("至少需要"), "错误信息没给出可照做的下限: {e}");
     });
 }
+
+#[test]
+fn annotate_turns_boxes_into_a_task_an_agent_can_follow() {
+    if !have_node() {
+        println!("跳过：本机没有 Node");
+        return;
+    }
+    in_sandbox("annotate", |sandbox| {
+        podapp_runtime::install::install_from_path(&repo_root().join("pods/annotate"), "test")
+            .unwrap();
+        let img = sandbox.join("poster.png");
+        make_test_png(&img, 800, 600);
+
+        let out: Value = podapp_runtime::headless::run_action(
+            "app.annotate.task.build",
+            json!({
+                "image": img.display().to_string(),
+                "annotations": [
+                    { "x": 100, "y": 80, "w": 200, "h": 120, "instruction": "这里换成真二维码" },
+                    // 故意越界：宽度从 x=700 起要 400，超出 800 的图
+                    { "x": 700, "y": 500, "w": 400, "h": 400, "instruction": "标题放大一号" }
+                ],
+                "note": "整体风格别动"
+            }),
+        )
+        .unwrap_or_else(|e| panic!("无头执行失败: {e}"));
+
+        assert_eq!(out["count"], 2);
+
+        let task = &out["task"];
+        // 坐标系必须写明。不写的话对面只能猜是原图还是显示尺寸，猜错框就偏了。
+        assert_eq!(task["image"]["coordinate_space"], "source-pixels");
+        assert_eq!(task["image"]["origin"], "top-left");
+        assert_eq!(task["image"]["w"], 800);
+
+        let ann = task["annotations"].as_array().unwrap();
+        assert_eq!(ann.len(), 2);
+        assert_eq!(ann[0]["index"], 1);
+        assert_eq!(ann[0]["width"], 200);
+
+        // 越界的框必须被夹回图内，**而且返回的坐标就是夹过之后的**。
+        // 返回原始越界值而画出来是夹过的，正是这个程序舱要消灭的那种含糊。
+        let x = ann[1]["x"].as_i64().unwrap();
+        let w = ann[1]["width"].as_i64().unwrap();
+        assert!(x + w <= 800, "第 2 处越界了: x={x} w={w}");
+        let y = ann[1]["y"].as_i64().unwrap();
+        let h = ann[1]["height"].as_i64().unwrap();
+        assert!(y + h <= 600, "第 2 处纵向越界: y={y} h={h}");
+
+        // 给人贴的那段话和结构化任务必须同源
+        let prompt = out["prompt"].as_str().unwrap();
+        assert!(prompt.contains("这里换成真二维码"));
+        assert!(prompt.contains("整体风格别动"));
+        assert!(prompt.contains("800×600"));
+
+        // 标注图落了盘，且返回值里没有像素
+        assert!(std::path::Path::new(out["overlay"]["path"].as_str().unwrap()).exists());
+        assert!(!out.to_string().contains("iVBORw0"), "返回值里混进了 PNG base64");
+    });
+}
+
+#[test]
+fn annotate_refuses_an_empty_selection() {
+    if !have_node() {
+        println!("跳过：本机没有 Node");
+        return;
+    }
+    in_sandbox("annotate-empty", |sandbox| {
+        podapp_runtime::install::install_from_path(&repo_root().join("pods/annotate"), "test")
+            .unwrap();
+        let img = sandbox.join("p.png");
+        make_test_png(&img, 200, 200);
+        let e = podapp_runtime::headless::run_action(
+            "app.annotate.task.build",
+            json!({ "image": img.display().to_string(), "annotations": [] }),
+        )
+        .unwrap_err();
+        assert!(e.contains("一个标注都没有"), "实际: {e}");
+    });
+}

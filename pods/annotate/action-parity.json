@@ -1,0 +1,68 @@
+{
+  "spec_version": "0.5.0",
+  "application": {
+    "id": "org.podapp.image.annotate",
+    "name": "图片标注",
+    "version": "0.1.0"
+  },
+  "surfaces": [
+    { "id": "pod", "kind": "gui", "required_for_parity": true },
+    { "id": "cli", "kind": "cli", "required_for_parity": true }
+  ],
+  "actions": [
+    {
+      "id": "app.annotate.task.build",
+      "title": "标注并生成任务",
+      "description": "Turn rectangles drawn on an image into a structured, coordinate-bearing task plus a numbered overlay image, so a coding agent never has to guess which element was meant.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["image", "annotations"],
+        "properties": {
+          "image": { "type": "string", "minLength": 1 },
+          "annotations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["x", "y", "w", "h", "instruction"],
+              "properties": {
+                "x": { "type": "number", "minimum": 0 },
+                "y": { "type": "number", "minimum": 0 },
+                "w": { "type": "number", "minimum": 1 },
+                "h": { "type": "number", "minimum": 1 },
+                "instruction": { "type": "string", "minLength": 1, "maxLength": 2000 }
+              }
+            }
+          },
+          "note": { "type": "string", "maxLength": 4000 }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "task": { "type": "object" },
+          "prompt": { "type": "string" },
+          "overlay": { "type": "object" }
+        }
+      },
+      "effects": {
+        "class": "read",
+        "risk": "low",
+        "reversible": true,
+        "confirmation": "never",
+        "audit_required": false
+      },
+      "execution": {
+        "headless": true,
+        "idempotent": true,
+        "cancellable": false,
+        "timeout_ms": 60000
+      },
+      "bindings": [
+        { "surface": "pod", "target": "pod-rpc:action/app.annotate.task.build" },
+        { "surface": "cli", "target": "cli:action run app.annotate.task.build --json" }
+      ]
+    }
+  ]
+}

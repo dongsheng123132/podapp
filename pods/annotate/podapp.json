@@ -1,0 +1,58 @@
+{
+  "profile": "podapp/pod@0.1",
+  "pod": {
+    "id": "org.podapp.image.annotate",
+    "slug": "annotate",
+    "name": "图片标注",
+    "version": "0.1.0",
+    "summary": "在 AI 生成的图上框一下，写清楚要改哪里",
+    "description": "你说「把上面那个标题放大」，AI 得猜是哪一个。这个程序舱让你直接在图上框出区域、写下要求，输出一份带坐标的结构化任务 + 一张画了框和编号的标注图。把这两样丢回 Codex，它不用再猜。",
+    "author": "PodApp",
+    "homepage": "https://podapp.net/pods/annotate",
+    "license": "MIT",
+    "locales": ["zh-CN"],
+    "min_host_version": "0.1.0"
+  },
+  "action_parity": "./action-parity.json",
+  "package": {
+    "kind": "web",
+    "web": {
+      "root": "web",
+      "entry": "index.html",
+      "actions": "actions.mjs"
+    }
+  },
+  "ui": {
+    "icon": "lucide:square-dashed-mouse-pointer",
+    "accent": "#f59e0b",
+    "container": "window",
+    "window": { "width": 1000, "height": 720, "resizable": true },
+    "home_dock": true,
+    "quick_actions": [
+      { "action": "app.annotate.task.build", "label": "标注并生成任务", "icon": "lucide:square-dashed-mouse-pointer" }
+    ],
+    "annotation": {
+      "kind": "rect",
+      "target_field": "annotations",
+      "action": "app.annotate.task.build",
+      "prompt": "框出要修改的地方",
+      "image_field": "image"
+    }
+  },
+  "permissions": {
+    "ai": {
+      "image_generate": false,
+      "image_edit": false,
+      "chat": false,
+      "video_generate": false,
+      "max_calls_per_run": 0
+    },
+    "fs": { "app_data": true, "save_dialog": false, "open_dialog": false },
+    "net": { "allow": [] },
+    "host_actions": []
+  },
+  "market": {
+    "category": "image",
+    "tags": ["标注", "改图", "交给AI", "Codex"]
+  }
+}

@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>图片标注</title>
+    <style>
+      :root { --bg:#14161a; --fg:#e6e8ec; --dim:#8b93a1; --line:#262a31; --accent:#f59e0b; --bad:#fca5a5; }
+      * { box-sizing:border-box; }
+      body { margin:0; background:var(--bg); color:var(--fg);
+             font:14px/1.6 "Microsoft YaHei UI", system-ui, sans-serif;
+             display:flex; flex-direction:column; height:100vh; }
+      header { padding:12px 18px; border-bottom:1px solid var(--line); font-weight:600; }
+      main { flex:1; display:flex; min-height:0; }
+      #stage { flex:1; display:grid; place-items:center; padding:16px; min-width:0; overflow:auto; }
+      #drop { border:1px dashed var(--line); border-radius:12px; padding:48px 32px;
+              text-align:center; color:var(--dim); }
+      #wrap { position:relative; line-height:0; cursor:crosshair; }
+      #pic { display:block; max-width:100%; max-height:70vh; border-radius:6px; }
+      svg { position:absolute; inset:0; width:100%; height:100%; }
+      aside { width:320px; border-left:1px solid var(--line); padding:14px;
+              display:flex; flex-direction:column; gap:10px; overflow-y:auto; }
+      .item { border:1px solid var(--line); border-radius:8px; padding:8px; }
+      .item .no { color:var(--accent); font-weight:600; font-size:12px; }
+      .item .rc { font-size:11px; color:var(--dim); }
+      textarea { width:100%; background:#0f1115; color:var(--fg); border:1px solid var(--line);
+                 border-radius:6px; padding:6px; font:inherit; font-size:12px; resize:vertical; }
+      button { background:var(--accent); color:#111; border:0; border-radius:8px;
+               padding:10px; font-size:14px; font-weight:600; cursor:pointer; }
+      button:disabled { background:#3a3f4a; color:var(--dim); cursor:not-allowed; }
+      button.ghost { background:none; border:1px solid var(--line); color:var(--dim); font-weight:400; }
+      .hint { font-size:12px; color:var(--dim); }
+      .bad { color:var(--bad); }
+      pre { background:#0f1115; border:1px solid var(--line); border-radius:8px; padding:8px;
+            font-size:11px; white-space:pre-wrap; word-break:break-all; max-height:200px; overflow:auto; }
+    </style>
+  </head>
+  <body>
+    <header>图片标注 —— 框出要改的地方，生成给 AI 的任务</header>
+    <main>
+      <section id="stage">
+        <div id="drop">把图拖进来，或 Ctrl+V 粘贴</div>
+        <div id="wrap" hidden><img id="pic" alt="待标注的图" /><svg id="ov"></svg></div>
+      </section>
+      <aside>
+        <div class="hint" id="tip">在图上按住拖一个框。</div>
+        <div id="list"></div>
+        <textarea id="note" rows="2" placeholder="补充说明（可选）"></textarea>
+        <button id="go" disabled>生成任务</button>
+        <div id="msg" class="hint"></div>
+        <pre id="outp" hidden></pre>
+      </aside>
+    </main>
+
+    <script type="module">
+      const $ = (id) => document.getElementById(id);
+      const [drop, wrap, pic, ov, list, go, msg, outp, note, tip] =
+        ["drop","wrap","pic","ov","list","go","msg","outp","note","tip"].map($);
+
+      let dataUrl = null;
+      let boxes = [];       // 原图像素坐标
+      let dragging = null;
+
+      /** 显示坐标 → 原图像素。**所有存下来的都是原图坐标** ——
+          存显示坐标的话，换个窗口大小框就偏了，而偏移量还随尺寸变。 */
+      const toSrc = (e) => {
+        const r = pic.getBoundingClientRect();
+        const k = pic.naturalWidth / r.width;
+        return { x: (e.clientX - r.left) * k, y: (e.clientY - r.top) * k };
+      };
+
+      function redraw() {
+        ov.setAttribute("viewBox", `0 0 ${pic.naturalWidth} ${pic.naturalHeight}`);
+        const t = Math.max(2, pic.naturalWidth / 300);
+        const live = dragging ? [...boxes, dragging] : boxes;
+        ov.innerHTML = live
+          .map((b, i) => `
+            <rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}"
+                  fill="rgba(245,158,11,.12)" stroke="#f59e0b" stroke-width="${t}"/>
+            <text x="${b.x + t * 2}" y="${b.y + t * 12}" fill="#f59e0b"
+                  font-size="${t * 12}" font-weight="700">${i + 1}</text>`)
+          .join("");
+        renderList();
+      }
+
+      function renderList() {
+        list.replaceChildren(
+          ...boxes.map((b, i) => {
+            const d = document.createElement("div");
+            d.className = "item";
+            const no = document.createElement("div");
+            no.className = "no";
+            no.textContent = `第 ${i + 1} 处`;
+            const rc = document.createElement("div");
+            rc.className = "rc";
+            rc.textContent = `(${Math.round(b.x)}, ${Math.round(b.y)}) ${Math.round(b.w)}×${Math.round(b.h)}`;
+            const ta = document.createElement("textarea");
+            ta.rows = 2;
+            ta.placeholder = "这里要怎么改？";
+            ta.value = b.instruction ?? "";
+            ta.oninput = () => { b.instruction = ta.value; syncGo(); };
+            const del = document.createElement("button");
+            del.className = "ghost";
+            del.textContent = "删掉这处";
+            del.onclick = () => { boxes.splice(i, 1); redraw(); syncGo(); };
+            d.append(no, rc, ta, del);
+            return d;
+          }),
+        );
+      }
+
+      // 每一处都得写清楚要改什么。少写一处就发给 AI，那一处它只能猜 ——
+      // 而这个程序舱存在的全部理由就是让它不用猜。
+      const syncGo = () => {
+        go.disabled = boxes.length === 0 || boxes.some((b) => !(b.instruction ?? "").trim());
+        tip.textContent = boxes.length === 0
+          ? "在图上按住拖一个框。"
+          : go.disabled ? "还有标注没写要求。" : `${boxes.length} 处，可以生成了。`;
+      };
+
+      wrap.addEventListener("pointerdown", (e) => {
+        const p = toSrc(e);
+        dragging = { x: p.x, y: p.y, w: 0, h: 0, _ox: p.x, _oy: p.y };
+        wrap.setPointerCapture(e.pointerId);
+      });
+      wrap.addEventListener("pointermove", (e) => {
+        if (!dragging) return;
+        const p = toSrc(e);
+        dragging.x = Math.min(p.x, dragging._ox);
+        dragging.y = Math.min(p.y, dragging._oy);
+        dragging.w = Math.abs(p.x - dragging._ox);
+        dragging.h = Math.abs(p.y - dragging._oy);
+        redraw();
+      });
+      wrap.addEventListener("pointerup", () => {
+        // 太小的多半是误点，不是标注
+        if (dragging && dragging.w > 8 && dragging.h > 8) {
+          delete dragging._ox; delete dragging._oy;
+          boxes.push({ ...dragging, instruction: "" });
+        }
+        dragging = null;
+        redraw();
+        syncGo();
+      });
+
+      function load(file) {
+        const fr = new FileReader();
+        fr.onload = () => {
+          dataUrl = String(fr.result);
+          pic.src = dataUrl;
+          pic.onload = () => { drop.hidden = true; wrap.hidden = false; boxes = []; redraw(); syncGo(); };
+        };
+        fr.readAsDataURL(file);
+      }
+      document.addEventListener("dragover", (e) => e.preventDefault());
+      document.addEventListener("drop", (e) => {
+        e.preventDefault();
+        const f = e.dataTransfer?.files?.[0];
+        if (f) load(f);
+      });
+      document.addEventListener("paste", (e) => {
+        const i = [...(e.clipboardData?.items ?? [])].find((x) => x.type.startsWith("image/"));
+        if (i) load(i.getAsFile());
+      });
+
+      go.onclick = async () => {
+        go.disabled = true;
+        msg.className = "hint";
+        msg.textContent = "生成中…";
+        try {
+          // 和 AI 无头调用同一条路
+          const r = await pod.action("app.annotate.task.build", {
+            image: dataUrl,
+            annotations: boxes.map((b) => ({
+              x: Math.round(b.x), y: Math.round(b.y),
+              w: Math.round(b.w), h: Math.round(b.h),
+              instruction: b.instruction.trim(),
+            })),
+            ...(note.value.trim() ? { note: note.value.trim() } : {}),
+          });
+          msg.textContent = r.message + "（标注图已进收件箱）";
+          outp.hidden = false;
+          outp.textContent = r.prompt;
+        } catch (e) {
+          msg.className = "hint bad";
+          msg.textContent = String(e.message || e);
+        }
+        syncGo();
+      };
+    </script>
+  </body>
+</html>
