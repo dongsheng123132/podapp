@@ -1,0 +1,44 @@
+{
+  "spec_version": "0.5.0",
+  "application": { "id": "org.podapp.image.qrfix", "name": "替换二维码", "version": "0.1.0" },
+  "surfaces": [
+    { "id": "pod", "kind": "gui", "required_for_parity": true },
+    { "id": "cli", "kind": "cli", "required_for_parity": true }
+  ],
+  "actions": [
+    {
+      "id": "app.qrfix.code.replace",
+      "title": "贴真二维码",
+      "description": "Paste a real, scannable QR code onto a poster at a given rectangle, then verify by scanning the result. Refuses to emit an unscannable image.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["poster", "at"],
+        "properties": {
+          "poster": { "type": "string", "minLength": 1 },
+          "qr_text": { "type": "string", "minLength": 1, "maxLength": 2000 },
+          "qr_image": { "type": "string", "minLength": 1 },
+          "at": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["x", "y", "w", "h"],
+            "properties": {
+              "x": { "type": "number", "minimum": 0 },
+              "y": { "type": "number", "minimum": 0 },
+              "w": { "type": "number", "minimum": 21 },
+              "h": { "type": "number", "minimum": 21 }
+            }
+          },
+          "verify": { "type": "boolean" }
+        }
+      },
+      "output_schema": { "type": "object" },
+      "effects": { "class": "read", "risk": "low", "reversible": true, "confirmation": "never", "audit_required": false },
+      "execution": { "headless": true, "idempotent": true, "cancellable": false, "timeout_ms": 120000 },
+      "bindings": [
+        { "surface": "pod", "target": "pod-rpc:action/app.qrfix.code.replace" },
+        { "surface": "cli", "target": "cli:action run app.qrfix.code.replace --json" }
+      ]
+    }
+  ]
+}

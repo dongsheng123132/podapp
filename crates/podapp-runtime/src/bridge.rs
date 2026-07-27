@@ -124,9 +124,19 @@ pub fn script() -> String {
       }});
     }}
   }};
+  // 宿主注册的能力（qr.* 之类）在这里够得着。
+  // 没有这层透传，能力注册表就只有一半：宿主能装，程序舱调不到。
+  var bridge = new Proxy(api, {{
+    get: function (t, k) {{
+      if (k in t || typeof k !== "string") return t[k];
+      return new Proxy({{}}, {{ get: function (_x, v) {{
+        return function () {{ return rpc(k + "." + String(v), Array.prototype.slice.call(arguments)); }};
+      }}}});
+    }}
+  }});
   // 规范名与宿主品牌别名指向同一个对象 —— 两个名字，一份实现
-  window.pod = api;
-  window.{alias} = api;
+  window.pod = bridge;
+  window.{alias} = bridge;
 }})();
 "#
     )
@@ -188,8 +198,13 @@ const api = {
   artifact: { emit: (p) => call("artifact.emit", p) },
 };
 
-// 与 GUI 桥一致：规范名 + 别名指向同一个对象
-const ctx = { pod: api, uking: api, signal: undefined };
+// 与 GUI 桥一致：未知命名空间透传给宿主能力，规范名 + 别名指向同一个对象
+const bridge = new Proxy(api, {
+  get: (t, k) => (k in t || typeof k !== "string")
+    ? t[k]
+    : new Proxy({}, { get: (_x, v) => (...a) => call(k + "." + String(v), a) }),
+});
+const ctx = { pod: bridge, uking: bridge, signal: undefined };
 
 try {
   const href = "file:///" + String(modPath).replace(/\\/g, "/").replace(/^\/+/, "");
@@ -270,11 +285,14 @@ mod tests {
     #[test]
     fn script_exposes_both_names_and_no_generic_fetch() {
         let js = script();
-        assert!(js.contains("window.pod = api"), "规范名");
+        assert!(js.contains("window.pod = bridge"), "规范名");
         assert!(
-            js.contains(&format!("window.{} = api", crate::profile().bridge_global)),
+            js.contains(&format!("window.{} = bridge", crate::profile().bridge_global)),
             "品牌别名"
         );
+        // 宿主注册的能力（qr.* 之类）要够得着。没有这层透传，能力注册表就只有一半：
+        // 宿主装得上，程序舱调不到。
+        assert!(js.contains("new Proxy(api"), "缺少未知命名空间的透传");
         for verb in ["artifact", "/rpc/", "image.", "storage.get"] {
             assert!(js.contains(verb), "桥缺少 {verb}");
         }
@@ -288,8 +306,9 @@ mod tests {
 
     #[test]
     fn runner_gives_actions_module_both_names() {
-        assert!(RUNNER_JS.contains("pod: api"));
-        assert!(RUNNER_JS.contains("uking: api"));
+        assert!(RUNNER_JS.contains("pod: bridge"));
+        assert!(RUNNER_JS.contains("uking: bridge"));
+        assert!(RUNNER_JS.contains("new Proxy(api"), "无头那条路也要能调宿主注册的能力");
         assert!(RUNNER_JS.contains("\\x01"), "行协议前缀不能丢");
     }
 }

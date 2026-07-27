@@ -1,0 +1,45 @@
+{
+  "profile": "podapp/pod@0.1",
+  "pod": {
+    "id": "org.podapp.image.qrfix",
+    "slug": "qrfix",
+    "name": "替换二维码",
+    "version": "0.1.0",
+    "summary": "AI 画的二维码扫不出来，用真码盖掉它",
+    "description": "AI 能画出好看的海报，但画不出能扫的二维码 —— 微信/支付宝的码是平台颁发的，模型只能画个像的。这个程序舱把真二维码贴到指定位置，并且**导出前先扫一遍**：扫不出来就不给你，免得印出来才发现。",
+    "author": "PodApp",
+    "homepage": "https://podapp.net/pods/qrfix",
+    "license": "MIT",
+    "locales": ["zh-CN"],
+    "min_host_version": "0.1.0"
+  },
+  "action_parity": "./action-parity.json",
+  "package": {
+    "kind": "web",
+    "web": { "root": "web", "entry": "index.html", "actions": "actions.mjs" }
+  },
+  "ui": {
+    "icon": "lucide:qr-code",
+    "accent": "#10b981",
+    "container": "window",
+    "window": { "width": 1000, "height": 720, "resizable": true },
+    "home_dock": true,
+    "quick_actions": [
+      { "action": "app.qrfix.code.replace", "label": "贴真二维码", "icon": "lucide:qr-code" }
+    ],
+    "annotation": {
+      "kind": "rect",
+      "target_field": "at",
+      "action": "app.qrfix.code.replace",
+      "prompt": "框出二维码该贴的位置",
+      "image_field": "poster"
+    }
+  },
+  "permissions": {
+    "ai": { "image_generate": false, "image_edit": false, "chat": false, "video_generate": false, "max_calls_per_run": 0 },
+    "fs": { "app_data": true, "save_dialog": false, "open_dialog": false },
+    "net": { "allow": [] },
+    "host_actions": []
+  },
+  "market": { "category": "image", "tags": ["二维码", "海报", "改图", "可扫描"] }
+}

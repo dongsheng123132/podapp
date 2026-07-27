@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>替换二维码</title>
+    <style>
+      :root { --bg:#14161a; --fg:#e6e8ec; --dim:#8b93a1; --line:#262a31; --ok:#10b981; --bad:#fca5a5; }
+      * { box-sizing:border-box; }
+      body { margin:0; background:var(--bg); color:var(--fg);
+             font:14px/1.6 "Microsoft YaHei UI", system-ui, sans-serif;
+             display:flex; flex-direction:column; height:100vh; }
+      header { padding:12px 18px; border-bottom:1px solid var(--line); font-weight:600; }
+      main { flex:1; display:flex; min-height:0; }
+      #stage { flex:1; display:grid; place-items:center; padding:16px; min-width:0; overflow:auto; }
+      #drop { border:1px dashed var(--line); border-radius:12px; padding:48px 32px;
+              text-align:center; color:var(--dim); }
+      #wrap { position:relative; line-height:0; cursor:crosshair; }
+      #pic { display:block; max-width:100%; max-height:70vh; border-radius:6px; }
+      svg { position:absolute; inset:0; width:100%; height:100%; }
+      aside { width:300px; border-left:1px solid var(--line); padding:14px;
+              display:flex; flex-direction:column; gap:10px; overflow-y:auto; }
+      label { font-size:12px; color:var(--dim); }
+      input[type=text] { width:100%; background:#0f1115; color:var(--fg);
+                         border:1px solid var(--line); border-radius:6px; padding:7px; font:inherit; }
+      button { background:var(--ok); color:#08130e; border:0; border-radius:8px;
+               padding:10px; font-size:14px; font-weight:600; cursor:pointer; }
+      button:disabled { background:#3a3f4a; color:var(--dim); cursor:not-allowed; }
+      .hint { font-size:12px; color:var(--dim); }
+      .bad { color:var(--bad); }
+      .good { color:var(--ok); }
+    </style>
+  </head>
+  <body>
+    <header>替换二维码 —— 用真码盖掉 AI 画的那个</header>
+    <main>
+      <section id="stage">
+        <div id="drop">把海报拖进来，或 Ctrl+V 粘贴</div>
+        <div id="wrap" hidden><img id="pic" alt="海报" /><svg id="ov"></svg></div>
+      </section>
+      <aside>
+        <div>
+          <label for="txt">二维码内容（网址或文本）</label>
+          <input id="txt" type="text" placeholder="https://..." />
+          <div class="hint">按目标尺寸直接生成，不缩放 —— 缩放会糊掉模块，扫不出来。</div>
+        </div>
+        <div class="hint" id="tip">在海报上按住拖一个方框，框出码该贴的位置。</div>
+        <button id="go" disabled>贴上去并验证</button>
+        <div id="msg" class="hint"></div>
+      </aside>
+    </main>
+
+    <script type="module">
+      const $ = (id) => document.getElementById(id);
+      const [drop, wrap, pic, ov, txt, go, msg, tip] =
+        ["drop","wrap","pic","ov","txt","go","msg","tip"].map($);
+      let dataUrl = null, box = null, drag = null;
+
+      const toSrc = (e) => {
+        const r = pic.getBoundingClientRect();
+        const k = pic.naturalWidth / r.width;
+        return { x: (e.clientX - r.left) * k, y: (e.clientY - r.top) * k };
+      };
+
+      function redraw() {
+        ov.setAttribute("viewBox", `0 0 ${pic.naturalWidth} ${pic.naturalHeight}`);
+        const b = drag ?? box;
+        const t = Math.max(2, pic.naturalWidth / 300);
+        // 码是方的，预览就按短边画成方框 —— 免得用户拖了个长方形还以为能贴成那样
+        const s = b ? Math.min(b.w, b.h) : 0;
+        ov.innerHTML = b
+          ? `<rect x="${b.x}" y="${b.y}" width="${s}" height="${s}"
+                   fill="rgba(16,185,129,.15)" stroke="#10b981" stroke-width="${t}"/>`
+          : "";
+        sync();
+      }
+
+      const sync = () => {
+        const s = box ? Math.min(box.w, box.h) : 0;
+        go.disabled = !dataUrl || !box || s < 21 || !txt.value.trim();
+        tip.textContent = !box
+          ? "在海报上按住拖一个方框。"
+          : s < 21 ? "框太小了，二维码至少要 21 像素。"
+          : `将贴 ${Math.floor(s)}×${Math.floor(s)}。`;
+      };
+      txt.addEventListener("input", sync);
+
+      wrap.addEventListener("pointerdown", (e) => {
+        const p = toSrc(e);
+        drag = { x: p.x, y: p.y, w: 0, h: 0, _o: p };
+        wrap.setPointerCapture(e.pointerId);
+      });
+      wrap.addEventListener("pointermove", (e) => {
+        if (!drag) return;
+        const p = toSrc(e);
+        drag.x = Math.min(p.x, drag._o.x); drag.y = Math.min(p.y, drag._o.y);
+        drag.w = Math.abs(p.x - drag._o.x); drag.h = Math.abs(p.y - drag._o.y);
+        redraw();
+      });
+      wrap.addEventListener("pointerup", () => {
+        if (drag && Math.min(drag.w, drag.h) > 8) { delete drag._o; box = drag; }
+        drag = null; redraw();
+      });
+
+      function load(f) {
+        const fr = new FileReader();
+        fr.onload = () => {
+          dataUrl = String(fr.result);
+          pic.src = dataUrl;
+          pic.onload = () => { drop.hidden = true; wrap.hidden = false; box = null; redraw(); };
+        };
+        fr.readAsDataURL(f);
+      }
+      document.addEventListener("dragover", (e) => e.preventDefault());
+      document.addEventListener("drop", (e) => {
+        e.preventDefault();
+        const f = e.dataTransfer?.files?.[0];
+        if (f) load(f);
+      });
+      document.addEventListener("paste", (e) => {
+        const i = [...(e.clipboardData?.items ?? [])].find((x) => x.type.startsWith("image/"));
+        if (i) load(i.getAsFile());
+      });
+
+      go.onclick = async () => {
+        go.disabled = true;
+        msg.className = "hint";
+        msg.textContent = "贴上去并扫一遍…";
+        try {
+          // 和 AI 无头调用同一条路
+          const r = await pod.action("app.qrfix.code.replace", {
+            poster: dataUrl,
+            qr_text: txt.value.trim(),
+            at: { x: Math.floor(box.x), y: Math.floor(box.y),
+                  w: Math.floor(Math.min(box.w, box.h)), h: Math.floor(Math.min(box.w, box.h)) },
+          });
+          msg.className = "hint good";
+          msg.textContent = r.message + "（成品已进收件箱）";
+        } catch (e) {
+          // 扫不出来是**有用**的失败：它挡住了一张会被拿去印的废图
+          msg.className = "hint bad";
+          msg.textContent = String(e.message || e);
+        }
+        sync();
+      };
+    </script>
+  </body>
+</html>
