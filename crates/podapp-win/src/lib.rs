@@ -24,6 +24,8 @@
 //! 追上游内部结构是有代价的（U-King 的 `codex.rs` 为此删过一整块 computer-use 探测）。
 //! 这里只依赖两件很稳的事：MSIX 包名，以及「GUI 进程有窗口」。都变了才需要改这里。
 
+pub mod dock;
+
 #[cfg(windows)]
 mod win;
 
