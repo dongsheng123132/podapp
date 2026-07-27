@@ -185,6 +185,73 @@ pub fn refresh(w: &HostWindow) -> Option<Rect> {
     window_rect(hwnd).filter(|r| r.looks_like_a_real_window())
 }
 
+/// 声明本进程「按显示器感知 DPI」。**必须在任何取坐标的调用之前跑一次。**
+///
+/// 不声明的话，Windows 会给进程一套**虚拟化**的坐标：`GetMonitorInfoW` 报逻辑像素，
+/// 而 `DwmGetWindowAttribute` 报物理像素 —— 两个坐标系混在一起，算出来的位置似是而非。
+///
+/// 这不是假想。实测这台 1.25 倍缩放的机器上：工作区报 `w=2048`（= 2560 / 1.25，逻辑），
+/// 宿主窗口右边缘报 `2507`（物理）。于是「宿主右边还剩多少地方」算出来是 **-459px**，
+/// 一个物理上不可能的数。而它推出的结论（放不下，得压上去）**恰好是对的**，
+/// 所以不盯着中间值看根本发现不了 —— 这种错最贵。
+///
+/// Tauri 的应用清单默认已经声明了 per-monitor v2，所以浮舱本体不受影响；
+/// 但裸 exe（examples/probe、集成测试）不会，必须自己调一次。
+///
+/// 重复调用、或宿主已经声明过，都会失败并返回 `false`，那是正常的，不用管。
+pub fn ensure_dpi_aware() -> bool {
+    use windows_sys::Win32::UI::HiDpi::{
+        SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
+    };
+    unsafe { SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) != 0 }
+}
+
+/// 本进程的坐标是不是统一的物理像素。
+///
+/// 宿主启动时该查一次：`false` 表示还没声明 DPI 感知，此后拿到的所有坐标都可能
+/// 是两个坐标系混着的。给它一个显式的查询函数，是因为这个错**不会以崩溃或异常值现身** ——
+/// 它只是让位置算得似是而非，而中间值里那个负数没人会去看。
+pub fn dpi_awareness_ok() -> bool {
+    use windows_sys::Win32::UI::HiDpi::{
+        GetAwarenessFromDpiAwarenessContext, GetThreadDpiAwarenessContext,
+        DPI_AWARENESS_PER_MONITOR_AWARE,
+    };
+    unsafe {
+        GetAwarenessFromDpiAwarenessContext(GetThreadDpiAwarenessContext())
+            == DPI_AWARENESS_PER_MONITOR_AWARE
+    }
+}
+
+/// 工作区（去掉任务栏之后能放窗口的那块）。
+///
+/// **按宿主窗口所在的那块屏取，不是主屏。** 用户把 Codex 拖到副屏上是常见的
+/// —— 拿主屏的工作区去算，浮舱会停在另一块屏幕上，而用户看到的是「浮舱不见了」。
+///
+/// `near` 传宿主窗口的 hwnd；宿主没开着时传 `None`，取主屏。
+pub fn work_area(near: Option<isize>) -> Rect {
+    use windows_sys::Win32::Graphics::Gdi::{
+        GetMonitorInfoW, MonitorFromPoint, MonitorFromWindow, MONITORINFO,
+        MONITOR_DEFAULTTONEAREST, MONITOR_DEFAULTTOPRIMARY,
+    };
+    unsafe {
+        let mon = match near {
+            Some(h) => MonitorFromWindow(h as HWND, MONITOR_DEFAULTTONEAREST),
+            None => MonitorFromPoint(
+                windows_sys::Win32::Foundation::POINT { x: 0, y: 0 },
+                MONITOR_DEFAULTTOPRIMARY,
+            ),
+        };
+        let mut mi: MONITORINFO = std::mem::zeroed();
+        mi.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+        if GetMonitorInfoW(mon, &mut mi) == 0 {
+            // 拿不到就给一个保守的默认，别让调用方拿到 0×0 去算除法
+            return Rect { x: 0, y: 0, w: 1920, h: 1080 };
+        }
+        let r = mi.rcWork;
+        Rect { x: r.left, y: r.top, w: r.right - r.left, h: r.bottom - r.top }
+    }
+}
+
 // ───────────────────────────── 跟随 ─────────────────────────────
 
 /// 跟随宿主窗口移动。
@@ -368,6 +435,48 @@ mod tests {
         };
         assert!(pids_of(&nobody).is_empty());
         assert!(find_host_window(&nobody).is_none());
+    }
+
+    #[test]
+    fn work_area_is_usable_with_or_without_a_host() {
+        ensure_dpi_aware();
+        assert!(dpi_awareness_ok(), "没声明 DPI 感知，后面所有坐标都不可信");
+
+        // 没有宿主时取主屏；有宿主时取它所在那块屏。两条路都不许返回空矩形 ——
+        // 拿 0×0 去算停靠位置，浮舱会缩成看不见的一条。
+        let primary = work_area(None);
+        assert!(primary.looks_like_a_real_window(), "主屏工作区不合理: {primary:?}");
+
+        if let Some(w) = find_host_window(&CODEX_APP) {
+            let near = work_area(Some(w.hwnd));
+            assert!(near.looks_like_a_real_window(), "宿主所在屏工作区不合理: {near:?}");
+            assert!(w.rect.x >= near.x - 1 && w.rect.y >= near.y - 1, "宿主不在它自己那块屏里?");
+        }
+    }
+
+    #[test]
+    fn window_and_monitor_coordinates_live_in_the_same_space() {
+        // 这条守的是一个**静默**错误：进程没声明 DPI 感知时，GetMonitorInfoW 给逻辑像素、
+        // DwmGetWindowAttribute 给物理像素。实测 1.25 倍缩放下工作区报 2048（=2560/1.25）、
+        // 宿主右边缘报 2507，于是「右边还剩多少」算出 -459px —— 物理上不可能的数，
+        // 而它推出的结论恰好还是对的，所以不盯着中间值看根本发现不了。
+        ensure_dpi_aware();
+        let Some(w) = find_host_window(&CODEX_APP) else { return };
+        let work = work_area(Some(w.hwnd));
+
+        // MonitorFromWindow 是因为窗口在这块屏上才返回它的，所以两者必须真的相交。
+        // 两个坐标系混着时，这个交集会算出负的宽或高。
+        let ox = w.rect.right().min(work.right()) - w.rect.x.max(work.x);
+        let oy = w.rect.bottom().min(work.bottom()) - w.rect.y.max(work.y);
+        assert!(ox > 0 && oy > 0, "窗口与它所在屏的工作区不相交，坐标系混了: {:?} vs {work:?}", w.rect);
+
+        // 窗口不该比它所在的屏幕还大出一大截 —— 缩放比最高 1.5 左右，
+        // 逻辑/物理混用会造成 25%~50% 的系统性偏差，这个阈值刚好卡在中间。
+        assert!(
+            w.rect.w <= work.w * 3 / 2 && w.rect.h <= work.h * 3 / 2,
+            "窗口({:?})比工作区({work:?})大太多，像是逻辑与物理像素混用",
+            w.rect
+        );
     }
 
     #[test]

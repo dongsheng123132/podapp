@@ -6,6 +6,8 @@
 use podapp_win::{find_host_window, pids_of, CODEX_APP};
 
 fn main() {
+    // 裸 exe 不像 Tauri 那样自带 DPI 声明，不先调这个，下面的坐标会是两个坐标系混着的
+    podapp_win::ensure_dpi_aware();
     // `--watch N`：跟随 N 秒，把每次位置变化打出来。拖动 Codex 窗口就能看见浮舱会贴到哪。
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--watch") {
@@ -45,7 +47,21 @@ fn main() {
                 "位置：x={} y={} w={} h={}（右边缘 {}）",
                 w.rect.x, w.rect.y, w.rect.w, w.rect.h, w.rect.right()
             );
-            println!("\n浮舱会贴到 x={} 处，高度跟随 {}。", w.rect.right(), w.rect.h);
+
+            let work = podapp_win::work_area(Some(w.hwnd));
+            println!("所在屏工作区：x={} y={} w={} h={}", work.x, work.y, work.w, work.h);
+
+            let p = podapp_win::dock::place(Some(w.rect), work, true);
+            let room = work.right() - w.rect.right();
+            println!(
+                "\n浮舱：x={} y={} w={} h={}（{:?}）",
+                p.rect.x, p.rect.y, p.rect.w, p.rect.h, p.anchor
+            );
+            if p.rect.x < w.rect.right() {
+                println!("宿主右边只剩 {room}px，放不下 {}px 的浮舱 —— 压在宿主右侧上方。", p.rect.w);
+            } else {
+                println!("宿主右边有 {room}px，浮舱贴在旁边，不遮挡。");
+            }
         }
         None if pids.is_empty() => {
             println!("\n没找到 {} 的进程 —— 它没开着。", CODEX_APP.label);

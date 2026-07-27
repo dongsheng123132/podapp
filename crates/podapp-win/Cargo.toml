@@ -15,9 +15,7 @@ windows-sys = { version = "0.59", features = [
     "Win32_UI_Accessibility",
     "Win32_Graphics_Dwm",
     "Win32_System_LibraryLoader",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_HiDpi",
 ] }
 
-# 只有 tests/follow.rs 造测试窗口时才需要 WNDCLASSW/RegisterClassW（它们被 Gdi feature 门住）。
-# 放在 dev-dependencies 里，免得把 Gdi 拖进正式产物 —— 浮舱本身不画 GDI。
-[target.'cfg(windows)'.dev-dependencies]
-windows-sys = { version = "0.59", features = ["Win32_Graphics_Gdi"] }
