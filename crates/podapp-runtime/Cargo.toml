@@ -1,0 +1,13 @@
+[package]
+name = "podapp-runtime"
+version = "0.1.0"
+description = "PodApp 程序舱运行时 —— 清单 / 安装 / 动作分发 / 资源服务 / 权限 / 无头执行"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+flate2.workspace = true
+tar.workspace = true
