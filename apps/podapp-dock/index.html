@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PodApp</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <!-- 收起态：只有小船。整个窗口就这么大，所以它自己就是拖动把手。 -->
+    <div id="boat" class="boat" data-tauri-drag-region title="点击展开程序舱">🚤</div>
+
+    <!-- 展开态 -->
+    <section id="panel" class="panel" hidden>
+      <header class="bar" data-tauri-drag-region>
+        <span class="brand">🚤 PodApp</span>
+        <span id="attach" class="attach">未吸附</span>
+        <button id="collapse" class="icon" title="收起">－</button>
+      </header>
+
+      <div id="drop" class="drop">
+        把 Codex 生成的图 / 网页 / <code>.pod</code> 拖到这里
+      </div>
+
+      <ul id="pods" class="pods"></ul>
+
+      <footer class="foot">
+        <span id="caps" class="caps"></span>
+      </footer>
+    </section>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

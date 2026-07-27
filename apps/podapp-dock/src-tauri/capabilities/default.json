@@ -1,0 +1,17 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "浮舱与程序舱窗口的权限。默认最小：只给窗口控制和打开外链，不给 shell 执行。",
+  "windows": ["dock", "pod-*"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-close",
+    "core:window:allow-set-focus",
+    "core:window:allow-start-dragging",
+    "core:webview:allow-create-webview-window",
+    "dialog:default",
+    "opener:allow-open-url"
+  ]
+}

@@ -1,0 +1,38 @@
+[package]
+name = "podapp-dock"
+version = "0.1.0"
+description = "PodApp 浮舱 —— 贴在 AI 工作界面旁边的确定性动作舱"
+edition = "2021"
+license = "Apache-2.0"
+
+# 刻意**不**进上层 workspace：Tauri 的 build.rs 要求 frontendDist 目录存在，
+# 而那个目录是 vite 产物、进了 .gitignore。放进 workspace 会让根目录的
+# `cargo test`（纯 Rust、几秒钟）变成「必须先装 npm 依赖并跑一次前端构建」。
+[workspace]
+
+[lib]
+name = "podapp_dock_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+podapp-runtime = { path = "../../../crates/podapp-runtime" }
+podapp-win = { path = "../../../crates/podapp-win" }
+
+[target.'cfg(desktop)'.dependencies]
+tauri-plugin-global-shortcut = "2"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

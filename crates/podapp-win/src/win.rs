@@ -132,6 +132,8 @@ fn window_title(hwnd: HWND) -> String {
 
 struct Scan {
     pids: Vec<u32>,
+    /// 要不要用「像个主窗口」的尺寸启发式筛。找宿主时要，找自己时不要。
+    require_main_size: bool,
     found: Vec<HostWindow>,
 }
 
@@ -151,11 +153,23 @@ unsafe extern "system" fn enum_proc(hwnd: HWND, lparam: LPARAM) -> i32 {
         return 1;
     }
     let Some(rect) = window_rect(hwnd) else { return 1 };
-    if !rect.looks_like_a_real_window() {
+    if scan.require_main_size && !rect.looks_like_a_real_window() {
         return 1;
     }
     scan.found.push(HostWindow { hwnd: hwnd as isize, pid, title: window_title(hwnd), rect });
     1
+}
+
+fn scan_windows(app: &HostApp, require_main_size: bool) -> Vec<HostWindow> {
+    let pids = pids_of(app);
+    if pids.is_empty() {
+        return vec![];
+    }
+    let mut scan = Scan { pids, require_main_size, found: vec![] };
+    unsafe {
+        EnumWindows(Some(enum_proc), &mut scan as *mut Scan as LPARAM);
+    }
+    scan.found
 }
 
 /// 找宿主应用的主窗口。找不到返回 `None` —— 宿主没开着是**常态**，不是错误。
@@ -163,15 +177,16 @@ unsafe extern "system" fn enum_proc(hwnd: HWND, lparam: LPARAM) -> i32 {
 /// 多个候选时挑面积最大的那个：Chromium 系应用除了主窗口还会有若干辅助顶层窗口，
 /// 主窗口总是最大的那个。
 pub fn find_host_window(app: &HostApp) -> Option<HostWindow> {
-    let pids = pids_of(app);
-    if pids.is_empty() {
-        return None;
-    }
-    let mut scan = Scan { pids, found: vec![] };
-    unsafe {
-        EnumWindows(Some(enum_proc), &mut scan as *mut Scan as LPARAM);
-    }
-    scan.found.into_iter().max_by_key(|w| (w.rect.w as i64) * (w.rect.h as i64))
+    scan_windows(app, true).into_iter().max_by_key(|w| (w.rect.w as i64) * (w.rect.h as i64))
+}
+
+/// 一个应用的**全部**可见顶层窗口，不做尺寸筛选。
+///
+/// [`find_host_window`] 那条尺寸启发式（≥200px）是为了绕开 Chromium 的 1×1 隐藏窗口，
+/// 对「找别人家的主窗口」是对的。但浮舱自己收起时只有 64px 宽 —— 拿同一把尺子量它，
+/// 会得出「浮舱没在跑」。所以要找已知形态的自家窗口时用这个。
+pub fn find_windows_of(app: &HostApp) -> Vec<HostWindow> {
+    scan_windows(app, false)
 }
 
 /// 这个窗口还在不在、现在在哪。跟随时用它取新位置，比整轮重扫便宜得多。

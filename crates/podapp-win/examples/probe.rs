@@ -3,11 +3,54 @@
 //! 在真机上回答一个问题：**现在能不能找到 Codex 的主窗口，它在哪。**
 //! 浮舱吸附对不对，最终只能这样验 —— 单元测试证明不了「屏幕上那个窗口是不是它」。
 
-use podapp_win::{find_host_window, pids_of, CODEX_APP};
+use podapp_win::{find_host_window, pids_of, HostApp, CODEX_APP};
+
+/// 浮舱自己。用来验证「它真的停在算出来的地方」—— 这是唯一能客观回答
+/// 「吸附对不对」的办法，截图和肉眼都不行。
+const PODAPP_DOCK: HostApp = HostApp {
+    label: "PodApp 浮舱",
+    path_marker: "podapp-dock",
+    exe_names: &["podapp-dock.exe", "podapp.exe"],
+};
+
+/// `--verify`：把浮舱**实际**落点和 `dock::place` **算出来**的落点比一比。
+fn verify() -> i32 {
+    // 用 find_windows_of 而不是 find_host_window：浮舱收起时只有 64px 宽，
+    // 会被「像个主窗口」那把尺子筛掉。挑最大的那个（Tauri 可能另有隐藏辅助窗）。
+    let Some(dock) =
+        podapp_win::find_windows_of(&PODAPP_DOCK).into_iter().max_by_key(|w| w.rect.w * w.rect.h)
+    else {
+        println!("FAIL 浮舱没在跑 —— 先启动 podapp-dock.exe");
+        return 1;
+    };
+    let host = find_host_window(&CODEX_APP);
+    let work = podapp_win::work_area(host.as_ref().map(|h| h.hwnd).or(Some(dock.hwnd)));
+
+    // 浮舱启动时是收起态
+    let want = podapp_win::dock::place(host.as_ref().map(|h| h.rect), work, false);
+
+    println!("宿主   ：{:?}", host.as_ref().map(|h| h.rect));
+    println!("工作区 ：{work:?}");
+    println!("应该在 ：{:?}", want.rect);
+    println!("实际在 ：{:?}", dock.rect);
+
+    // 允许 1px 误差：窗口边框取整在某些缩放比下会差一个像素，那不是吸附错了
+    let d = |a: i32, b: i32| (a - b).abs() <= 1;
+    let ok = d(dock.rect.x, want.rect.x)
+        && d(dock.rect.y, want.rect.y)
+        && d(dock.rect.w, want.rect.w)
+        && d(dock.rect.h, want.rect.h);
+    println!("\n{}", if ok { "PASS 浮舱停在算出来的位置" } else { "FAIL 浮舱位置和计算不符" });
+    i32::from(!ok)
+}
 
 fn main() {
     // 裸 exe 不像 Tauri 那样自带 DPI 声明，不先调这个，下面的坐标会是两个坐标系混着的
     podapp_win::ensure_dpi_aware();
+
+    if std::env::args().any(|a| a == "--verify") {
+        std::process::exit(verify());
+    }
     // `--watch N`：跟随 N 秒，把每次位置变化打出来。拖动 Codex 窗口就能看见浮舱会贴到哪。
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--watch") {
