@@ -11,6 +11,8 @@ mod protocol;
 use podapp_runtime::{HostProfile, PodInfo};
 use serde_json::Value;
 use tauri::{Emitter, Manager};
+#[cfg(desktop)]
+use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 /// 前端要的一整份状态。做成一次调用而不是四个 getter：
 /// 分开取会让界面出现「已吸附但列表还是空的」这种中间态。
@@ -89,6 +91,17 @@ fn dock_artifacts() -> Vec<podapp_runtime::artifacts::Artifact> {
     podapp_runtime::artifacts::list()
 }
 
+/// 命令行里带的 `.pod` 路径。
+///
+/// 双击 `.pod` 时 Windows 就是把路径当参数拉起我们。**只认 `.pod` 结尾的存在的文件** ——
+/// 把任意参数都当包去装，等于给「谁能让 PodApp 装东西」开了一个没上锁的门。
+fn pods_from_argv() -> Vec<String> {
+    std::env::args()
+        .skip(1)
+        .filter(|a| a.to_ascii_lowercase().ends_with(".pod") && std::path::Path::new(a).is_file())
+        .collect()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // 运行时装 PodApp 档案：`~/.podapp`、`PODAPP_*` 环境变量、`window.pod` 桥。
@@ -131,11 +144,39 @@ pub fn run() {
                 });
             }
 
-            // 必须在第一次 reposition 之前 —— 否则收起态会被系统下限撑到 170px
-            dock::allow_narrow(&handle);
+            // 全局热键：不管焦点在哪都能把浮舱叫出来。这是「浮在界面之上」的另一半 ——
+            // 吸附解决「它在哪」，热键解决「怎么够得着」。
+            #[cfg(desktop)]
+            {
+                use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
+                let toggle = Shortcut::new(Some(Modifiers::ALT), Code::Space);
+                let h = handle.clone();
+                let plugin = tauri_plugin_global_shortcut::Builder::new()
+                    .with_handler(move |_app, sc, event| {
+                        // 只认按下，不认抬起 —— 否则一次按键会切换两回，看起来像没反应
+                        if sc == &toggle && event.state() == ShortcutState::Pressed {
+                            dock::set_expanded(&h, !dock::is_expanded());
+                        }
+                    })
+                    .build();
+                // 热键被别的软件占了是常见情况，**不该让浮舱起不来** —— 记一笔继续走
+                if let Err(e) = handle.plugin(plugin) {
+                    eprintln!("[dock] 全局热键插件没装上：{e}");
+                } else if let Err(e) = handle.global_shortcut().register(toggle) {
+                    eprintln!("[dock] Alt+Space 注册失败（多半被别的软件占了）：{e}");
+                }
+            }
+
             dock::reposition(&handle);
             if let Some(win) = app.get_webview_window(dock::DOCK_LABEL) {
                 let _ = win.show();
+            }
+
+            // 双击 .pod 拉起我们时，把它装上并展开给用户看结果
+            let pending = pods_from_argv();
+            if !pending.is_empty() {
+                dock::set_expanded(&handle, true);
+                let _ = handle.emit("dock://dropped", pending);
             }
             Ok(())
         })

@@ -21,14 +21,15 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
+# 注意：不能写成 [target.'cfg(desktop)'.dependencies]。`desktop` 是 tauri-build 注入的
+# 自定义 cfg，Cargo 的 target 选择器只认 target_os / target_arch 这类真 cfg，
+# 写在那儿依赖根本不会被链接，而报错是「找不到 crate」，跟原因隔着好几层。
+tauri-plugin-global-shortcut = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 podapp-runtime = { path = "../../../crates/podapp-runtime" }
 podapp-win = { path = "../../../crates/podapp-win" }
-
-[target.'cfg(desktop)'.dependencies]
-tauri-plugin-global-shortcut = "2"
 
 [profile.release]
 opt-level = "z"

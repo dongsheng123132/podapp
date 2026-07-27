@@ -221,6 +221,22 @@ pub fn ensure_dpi_aware() -> bool {
     unsafe { SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) != 0 }
 }
 
+/// 系统允许的最小顶层窗口宽度（`SM_CXMIN`，物理像素）。
+///
+/// Windows 会把顶层窗口卡在这个宽度，**而且是静默的**：`set_size(64)` 不报错、
+/// 不警告，窗口就是比你要的宽。实测这台 1.25 倍缩放的机器上是 **170px**。
+///
+/// 试过用 `set_min_size(1,1)` 让 tao 接管 `WM_GETMINMAXINFO` 来绕开它 —— 不行：
+/// 事后 `GetWindowRect` 和 DWM 双双报 170，只有 tao 自己的 `outer_size()` 说 64
+///（它回的是请求值不是实际值，这一点本身就够坑）。
+///
+/// 所以不跟系统较劲，改成**把它当已知下限**参与计算。这样「算出来的位置」和
+/// 「窗口实际在哪」永远一致 —— 那条一致性正是 `probe --verify` 在守的东西。
+pub fn min_window_width() -> i32 {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXMIN};
+    unsafe { GetSystemMetrics(SM_CXMIN) }
+}
+
 /// 本进程的坐标是不是统一的物理像素。
 ///
 /// 宿主启动时该查一次：`false` 表示还没声明 DPI 感知，此后拿到的所有坐标都可能

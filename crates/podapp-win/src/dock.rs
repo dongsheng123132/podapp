@@ -13,6 +13,38 @@ pub const DOCK_WIDTH_COLLAPSED: i32 = 64;
 /// 贴在宿主右侧时留的缝。0 表示严丝合缝。
 const GAP: i32 = 0;
 
+/// 浮舱的尺寸参数，外加**平台强加的下限**。
+///
+/// 把下限做成入参而不是在 [`place`] 里直接查系统：几何保持纯函数，
+/// 才能把宿主占满屏、被拖出屏幕这些畸形输入用几行断言穷举掉。
+/// 平台那部分由调用方注入（见 [`crate::min_window_width`]）。
+#[derive(Debug, Clone, Copy)]
+pub struct Metrics {
+    pub expanded_w: i32,
+    pub collapsed_w: i32,
+    /// 系统允许的最小窗口宽度。0 = 不设限（测试和非 Windows 用）。
+    pub min_w: i32,
+}
+
+impl Default for Metrics {
+    fn default() -> Self {
+        Self { expanded_w: DOCK_WIDTH_EXPANDED, collapsed_w: DOCK_WIDTH_COLLAPSED, min_w: 0 }
+    }
+}
+
+impl Metrics {
+    /// 带上本机平台下限的一份参数。
+    #[cfg(windows)]
+    pub fn platform() -> Self {
+        Self { min_w: crate::min_window_width(), ..Default::default() }
+    }
+
+    fn width(&self, expanded: bool) -> i32 {
+        let w = if expanded { self.expanded_w } else { self.collapsed_w };
+        w.max(self.min_w)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Anchor {
     /// 贴在宿主窗口右侧
@@ -35,8 +67,8 @@ pub struct Placement {
 ///
 /// - `host`：宿主窗口矩形，`None` = 宿主没开着（**常态，不是错误**）
 /// - `work`：屏幕工作区（已去掉任务栏）
-pub fn place(host: Option<Rect>, work: Rect, expanded: bool) -> Placement {
-    let w = if expanded { DOCK_WIDTH_EXPANDED } else { DOCK_WIDTH_COLLAPSED };
+pub fn place(host: Option<Rect>, work: Rect, expanded: bool, m: Metrics) -> Placement {
+    let w = m.width(expanded);
 
     let (mut x, y, h, anchor) = match host {
         Some(hr) => (hr.right() + GAP, hr.y, hr.h, Anchor::HostRight),
@@ -72,7 +104,7 @@ mod tests {
     fn snaps_beside_the_host_when_there_is_room() {
         // 宿主右边留了 500px，够放下 380 的浮舱 —— 这时不该压在宿主上
         let host = Rect { x: 200, y: 250, w: 1800, h: 1025 };
-        let p = place(Some(host), work(), true);
+        let p = place(Some(host), work(), true, Metrics::default());
         assert_eq!(p.anchor, Anchor::HostRight);
         assert_eq!(p.rect.x, 2000, "该紧贴宿主右边缘");
         assert_eq!(p.rect.y, 250, "顶部跟宿主对齐");
@@ -89,7 +121,7 @@ mod tests {
         // 所以这里的选择是压在宿主右侧上方（像 Raycast 那类浮层），
         // 而不是把浮舱推出屏幕 —— 看不见的窗口对用户等于程序坏了。
         let host = Rect { x: 999, y: 250, w: 1508, h: 1025 };
-        let p = place(Some(host), work(), true);
+        let p = place(Some(host), work(), true, Metrics::default());
         assert_eq!(p.rect.right(), work().right(), "贴住屏幕右缘");
         assert!(p.rect.x < host.right(), "确实压在宿主上");
         assert_eq!(p.rect.y, 250, "仍然跟宿主上下对齐，不是贴满全屏");
@@ -99,7 +131,7 @@ mod tests {
     #[test]
     fn falls_back_to_screen_edge_when_the_host_is_not_running() {
         // 宿主没开着是常态：浮舱退到工作区右缘，而不是消失或报错
-        let p = place(None, work(), false);
+        let p = place(None, work(), false, Metrics::default());
         assert_eq!(p.anchor, Anchor::ScreenRight);
         assert_eq!(p.rect.right(), work().right());
         assert_eq!(p.rect.w, DOCK_WIDTH_COLLAPSED);
@@ -113,7 +145,7 @@ mod tests {
             Rect { x: 0, y: 0, w: 4000, h: 1400 },   // 比屏幕还宽
             Rect { x: 2400, y: 0, w: 1000, h: 1400 } // 大半在屏幕外
         ] {
-            let p = place(Some(host), work(), true);
+            let p = place(Some(host), work(), true, Metrics::default());
             assert!(p.rect.x >= work().x, "跑到屏幕左外了: {p:?}");
             assert!(p.rect.right() <= work().right(), "跑到屏幕右外了: {p:?}");
         }
@@ -123,7 +155,7 @@ mod tests {
     fn a_host_above_the_work_area_does_not_drag_the_dock_up() {
         // 宿主标题栏被拖到屏幕上方之外时，浮舱顶部仍应留在工作区内
         let host = Rect { x: 100, y: -300, w: 800, h: 900 };
-        let p = place(Some(host), work(), true);
+        let p = place(Some(host), work(), true, Metrics::default());
         assert!(p.rect.y >= work().y, "浮舱顶部跑到工作区上方了: {p:?}");
         assert!(p.rect.bottom() <= work().bottom(), "浮舱底部超出工作区了: {p:?}");
     }
@@ -131,8 +163,30 @@ mod tests {
     #[test]
     fn a_very_short_host_still_leaves_a_usable_dock() {
         let host = Rect { x: 100, y: 100, w: 800, h: 20 };
-        let p = place(Some(host), work(), true);
+        let p = place(Some(host), work(), true, Metrics::default());
         assert!(p.rect.h >= 120, "浮舱被挤成一条了: {p:?}");
+    }
+
+    #[test]
+    fn the_platform_floor_wins_over_the_desired_width() {
+        // Windows 把顶层窗口卡在 SM_CXMIN（实测 170px），而收起态只想要 64px。
+        // 试过 set_min_size(1,1) 绕开，不行 —— GetWindowRect 和 DWM 双双报 170。
+        //
+        // 所以不跟系统较劲，把下限算进来。**关键是「算出来的」要等于「实际的」**：
+        // 假装自己是 64 而系统给 170，会让停靠位置差 106px，而没有任何报错。
+        let m = Metrics { min_w: 170, ..Default::default() };
+        let host = Rect { x: 200, y: 250, w: 1800, h: 1025 };
+
+        let c = place(Some(host), work(), false, m);
+        assert_eq!(c.rect.w, 170, "收起宽度该被抬到平台下限");
+
+        // 展开宽度本来就大于下限，不该被影响
+        let e = place(Some(host), work(), true, m);
+        assert_eq!(e.rect.w, DOCK_WIDTH_EXPANDED);
+
+        // 没有平台下限时（测试 / 非 Windows）仍是原来的值
+        let c0 = place(Some(host), work(), false, Metrics::default());
+        assert_eq!(c0.rect.w, DOCK_WIDTH_COLLAPSED);
     }
 
     #[test]
@@ -140,15 +194,15 @@ mod tests {
         // 收起/展开只该改宽度，不该让浮舱整个跳到别处。
         // 「哪条边不动」取决于有没有被屏幕挤住，两种情况都要成立：
         let host_roomy = Rect { x: 200, y: 250, w: 1800, h: 1025 };
-        let e = place(Some(host_roomy), work(), true);
-        let c = place(Some(host_roomy), work(), false);
+        let e = place(Some(host_roomy), work(), true, Metrics::default());
+        let c = place(Some(host_roomy), work(), false, Metrics::default());
         assert_eq!(e.rect.x, c.rect.x, "有地方时贴着宿主，左边缘不动、向右长");
         assert_eq!(e.anchor, c.anchor);
         assert!(c.rect.w < e.rect.w);
 
         let host_tight = Rect { x: 999, y: 250, w: 1508, h: 1025 };
-        let e = place(Some(host_tight), work(), true);
-        let c = place(Some(host_tight), work(), false);
+        let e = place(Some(host_tight), work(), true, Metrics::default());
+        let c = place(Some(host_tight), work(), false, Metrics::default());
         assert_eq!(e.rect.right(), c.rect.right(), "被挤住时贴着屏幕右缘，右边缘不动、向左长");
         assert_eq!(e.rect.y, c.rect.y, "上下位置任何时候都不该跳");
     }

@@ -27,7 +27,12 @@ fn verify() -> i32 {
     let work = podapp_win::work_area(host.as_ref().map(|h| h.hwnd).or(Some(dock.hwnd)));
 
     // 浮舱启动时是收起态
-    let want = podapp_win::dock::place(host.as_ref().map(|h| h.rect), work, false);
+    let want = podapp_win::dock::place(
+        host.as_ref().map(|h| h.rect),
+        work,
+        false,
+        podapp_win::dock::Metrics::platform(),
+    );
 
     println!("宿主   ：{:?}", host.as_ref().map(|h| h.rect));
     println!("工作区 ：{work:?}");
@@ -94,7 +99,7 @@ fn main() {
             let work = podapp_win::work_area(Some(w.hwnd));
             println!("所在屏工作区：x={} y={} w={} h={}", work.x, work.y, work.w, work.h);
 
-            let p = podapp_win::dock::place(Some(w.rect), work, true);
+            let p = podapp_win::dock::place(Some(w.rect), work, true, podapp_win::dock::Metrics::platform());
             let room = work.right() - w.rect.right();
             println!(
                 "\n浮舱：x={} y={} w={} h={}（{:?}）",

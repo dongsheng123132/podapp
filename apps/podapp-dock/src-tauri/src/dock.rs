@@ -3,7 +3,7 @@
 //! 位置怎么算不在这里（在 [`podapp_win::dock::place`]，纯函数、已穷举测过）。
 //! 这里只干两件事：把算出来的位置**贴到真窗口上**，以及在宿主来去时切换状态。
 
-use podapp_win::{dock::place, HostWindow, Rect};
+use podapp_win::{dock::place, dock::Metrics, HostWindow, Rect};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize};
 
@@ -23,19 +23,6 @@ fn with_state<T>(f: impl FnOnce(&mut DockState) -> T) -> T {
     f(g.get_or_insert_with(DockState::default))
 }
 
-/// 启动时调一次：解除系统对窗口最小宽度的限制。
-///
-/// Windows 默认把顶层窗口卡在 `SM_CXMIN`（这台 1.25 倍缩放的机器上实测 **170px**）。
-/// 收起态的浮舱只要 64px —— 不解除的话，`set_size(64)` 会被静默放大到 170，
-/// 而且**没有任何报错**：窗口就是比你要的宽一倍多，看起来像 CSS 写错了。
-///
-/// 显式设过 min size 之后，tao 会接管 `WM_GETMINMAXINFO`，系统那个下限才不再生效。
-pub fn allow_narrow(app: &AppHandle) {
-    if let Some(win) = app.get_webview_window(DOCK_LABEL) {
-        let _ = win.set_min_size(Some(PhysicalSize::new(1u32, 1u32)));
-    }
-}
-
 /// 把浮舱摆到它该在的位置。
 ///
 /// 坐标一律 `Physical*`：[`podapp_win`] 给的就是物理像素（DWM + per-monitor DPI），
@@ -45,9 +32,16 @@ pub fn reposition(app: &AppHandle) {
     let (host_rect, expanded) = with_state(|s| (s.host.as_ref().map(|h| h.rect), s.expanded));
 
     let work = podapp_win::work_area(with_state(|s| s.host.as_ref().map(|h| h.hwnd)));
-    let p = place(host_rect, work, expanded);
+    // 平台下限从这里注入 —— 几何那边保持纯函数
+    let p = place(host_rect, work, expanded, Metrics::platform());
 
-    let _ = win.set_size(PhysicalSize::new(p.rect.w.max(1) as u32, p.rect.h.max(1) as u32));
+    // 宽度已经把平台下限算进去了（Metrics::platform），所以这里请求什么就得到什么。
+    // 曾经试过 set_min_size(1,1) 让 tao 接管 WM_GETMINMAXINFO 来要一个比 SM_CXMIN
+    // 更窄的窗口 —— 不管用：事后 GetWindowRect 和 DWM 双双报 170，
+    // 只有 tao 自己的 outer_size() 回 64（它回的是请求值不是实际值）。
+    // 所以改成顺着平台走，让「算出来的」和「实际的」永远一致。
+    let want = PhysicalSize::new(p.rect.w.max(1) as u32, p.rect.h.max(1) as u32);
+    let _ = win.set_size(want);
     let _ = win.set_position(PhysicalPosition::new(p.rect.x, p.rect.y));
     // 置顶会被别的置顶窗口抢走，每次移动重新声明一次，代价极低
     let _ = win.set_always_on_top(true);
