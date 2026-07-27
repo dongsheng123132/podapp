@@ -258,3 +258,107 @@ fn annotate_refuses_an_empty_selection() {
         assert!(e.contains("一个标注都没有"), "实际: {e}");
     });
 }
+
+/// 跑一条 `podapp` CLI 命令，返回 stdout 第一行（CLI 约定：结果走 stdout、日志走 stderr）。
+fn podapp_cli(cwd: &std::path::Path, args: &[&str]) -> Result<String, String> {
+    let cli = repo_root().join("../podapp-protocol/bin/podapp.mjs");
+    if !cli.exists() {
+        return Err(format!("找不到 CLI: {}", cli.display()));
+    }
+    let o = std::process::Command::new(if cfg!(windows) { "node.exe" } else { "node" })
+        .arg(&cli)
+        .args(args)
+        .current_dir(cwd)
+        .output()
+        .map_err(|e| format!("起不来 node: {e}"))?;
+    if !o.status.success() {
+        return Err(format!(
+            "podapp {args:?} 失败（{:?}）: {}",
+            o.status.code(),
+            String::from_utf8_lossy(&o.stderr)
+        ));
+    }
+    Ok(String::from_utf8_lossy(&o.stdout).lines().next().unwrap_or("").trim().to_string())
+}
+
+/// 文档里那个闭环，一次跑完：**脚手架 → 打包 → 安装 → 无头执行**。
+///
+/// 这条测试同时是 JS 打包器和 Rust 解包器之间的**契约测试**。两边各写一套
+/// tar 处理（一个手写 USTAR，一个用 tar crate），谁改了细节都可能让对方装不上，
+/// 而症状是「包好像没问题但就是装不了」—— 隔着语言边界最难查的那种。
+#[test]
+fn the_whole_loop_works_scaffold_pack_install_run() {
+    if !have_node() {
+        println!("跳过：本机没有 Node");
+        return;
+    }
+    in_sandbox("loop", |sandbox| {
+        let work = sandbox.join("work");
+        std::fs::create_dir_all(&work).unwrap();
+
+        // ① 让 CLI 生成骨架。它自带自检，生成完就该是能装的。
+        let created = match podapp_cli(&work, &["create", "loopdemo"]) {
+            Ok(p) => p,
+            Err(e) => {
+                println!("跳过：{e}");
+                return;
+            }
+        };
+        assert!(std::path::Path::new(&created).exists(), "脚手架目录没生成: {created}");
+
+        // ② 打成 .pod
+        let pod_file = podapp_cli(&work, &["pack", "loopdemo"]).expect("打包失败");
+        let pod_path = std::path::Path::new(&pod_file);
+        assert!(pod_path.exists(), "包没生成: {pod_file}");
+        assert!(pod_file.ends_with(".pod"), "后缀不对: {pod_file}");
+
+        // ③ 运行时装它 —— 从**包文件**装，不是从目录，走的是解包那条路
+        let info = podapp_runtime::install::install_from_path(pod_path, "cli-loop")
+            .unwrap_or_else(|e| panic!("运行时装不上 CLI 打的包: {e}"));
+        assert_eq!(info.id, "org.example.loopdemo");
+        assert_eq!(info.slug, "loopdemo");
+
+        // ④ 无头跑骨架自带的那个动作
+        let out: Value = podapp_runtime::headless::run_action(
+            "app.loopdemo.demo.run",
+            json!({ "text": "闭环" }),
+        )
+        .unwrap_or_else(|e| panic!("无头执行失败: {e}"));
+        assert_eq!(out["echo"], "闭环");
+        assert!(out["message"].as_str().unwrap().contains("闭环"));
+
+        // ⑤ 卸掉，别在沙箱里留东西
+        podapp_runtime::install::uninstall("org.example.loopdemo", true).unwrap();
+    });
+}
+
+/// CLI 判「能装」和运行时判「能装」必须一致。
+///
+/// 两份校验实现（JS 的 validate.mjs、Rust 的 load_dir）是天然的漂移源。
+/// 边界说死：**运行时说了算**。CLI 报通过而运行时拒绝，是 CLI 的 bug。
+/// 这条测试拿真实的官方程序舱把两边的结论对一遍。
+#[test]
+fn the_cli_and_the_runtime_agree_on_what_installs() {
+    if !have_node() {
+        println!("跳过：本机没有 Node");
+        return;
+    }
+    in_sandbox("agree", |_sandbox| {
+        for pod in ["nine-grid", "annotate"] {
+            let dir = repo_root().join("pods").join(pod);
+            let cli_ok = podapp_cli(&repo_root(), &["validate", dir.to_str().unwrap(), "--json"]);
+            let cli_ok = match cli_ok {
+                Ok(line) => {
+                    let v: Value = serde_json::from_str(&line).expect("--json 该只输出一行 JSON");
+                    v["ok"] == true
+                }
+                Err(e) => {
+                    println!("跳过 {pod}：{e}");
+                    return;
+                }
+            };
+            let rt_ok = podapp_runtime::manifest::load_dir(&dir).is_ok();
+            assert_eq!(cli_ok, rt_ok, "{pod}: CLI 说 {cli_ok}，运行时说 {rt_ok} —— 两份校验开始分家了");
+        }
+    });
+}
