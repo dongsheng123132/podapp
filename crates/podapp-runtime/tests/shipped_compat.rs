@@ -31,7 +31,7 @@ fn load(name: &str) -> Manifest {
 fn every_shipped_miniapp_still_parses() {
     for name in SHIPPED {
         let m = load(name);
-        assert_eq!(m.dialect, Dialect::UKing);
+        assert_eq!(m.dialect, Dialect::MiniApp);
         assert!(!m.ident.id.is_empty(), "{name}: id 空了");
         assert!(!m.ident.slug.is_empty(), "{name}: slug 空了");
         assert_eq!(m.package.kind, "web", "{name}: 三个内置的都是 web 形态");
@@ -52,7 +52,7 @@ fn shipped_manifests_survive_translation_to_podapp_and_back() {
             "{name}: 真实清单跨方言往返掉了信息"
         );
 
-        let round = Manifest::from_json(&back.to_json(Dialect::UKing)).unwrap();
+        let round = Manifest::from_json(&back.to_json(Dialect::MiniApp)).unwrap();
         assert_eq!(original, round, "{name}: 转回 uking 方言后对不上");
     }
 }

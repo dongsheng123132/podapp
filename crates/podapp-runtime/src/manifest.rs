@@ -182,7 +182,7 @@ impl Manifest {
             format!(
                 "不认识的 profile: {profile:?}（应为 {} 或 {}）",
                 Dialect::PodApp.profile_const(),
-                Dialect::UKing.profile_const()
+                Dialect::MiniApp.profile_const()
             )
         })?;
 

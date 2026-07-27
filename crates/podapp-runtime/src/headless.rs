@@ -9,8 +9,9 @@
 //! 权限闸装在 [`dispatch_capability`]，也就是**面之下**：GUI、无头、devtools 走同一道门。
 
 use crate::action_spec::validate_input;
+use crate::capability::{CapCtx, Capabilities};
+use crate::invoke::{Invocation, StateResolver};
 use crate::manifest::{load_dir, owner_of, resolve_dir};
-use crate::perms::{permits, Cap};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 
@@ -73,116 +74,18 @@ impl HostBridge for HeadlessHost {
     }
 }
 
-/// 处理一次能力请求。**权限闸在这里，且在 [`HostBridge`] 被调用之前。**
+/// 处理一次能力请求，用内置能力集。
+///
+/// 动词分发和权限闸都在 [`crate::capability::Capabilities`] 里 —— 这里只是个方便入口。
 pub fn dispatch_capability(
     pod_id: &str,
     verb: &str,
     args: &Value,
     host: &dyn HostBridge,
 ) -> Result<Value, String> {
-    let deny = |cap: &str| Err(format!("permission_denied: 这个程序舱没有申请 {cap} 权限"));
-    match verb {
-        "ai.image_edit" => {
-            if !permits(pod_id, Cap::AiImageEdit) {
-                return deny("ai.image_edit");
-            }
-            host.ai_image_edit(args)
-        }
-        "ai.image_generate" => {
-            if !permits(pod_id, Cap::AiImageGenerate) {
-                return deny("ai.image_generate");
-            }
-            host.ai_image_generate(args)
-        }
-        "ai.chat" => {
-            if !permits(pod_id, Cap::AiChat) {
-                return deny("ai.chat");
-            }
-            host.ai_chat(args)
-        }
-        "file.save" => {
-            if !permits(pod_id, Cap::FsSaveDialog) {
-                return deny("fs.save_dialog");
-            }
-            host.file_save(
-                args.get("name").and_then(|v| v.as_str()).unwrap_or("output"),
-                args.get("dataUrl").and_then(|v| v.as_str()).unwrap_or(""),
-            )
-        }
-        "file.open" => {
-            if !permits(pod_id, Cap::FsOpenDialog) {
-                return deny("fs.open_dialog");
-            }
-            let f: Vec<String> = args
-                .get("filters")
-                .and_then(|v| v.as_array())
-                .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect())
-                .unwrap_or_default();
-            host.file_open(&f)
-        }
-        "storage.get" | "storage.set" => {
-            if !permits(pod_id, Cap::FsAppData) {
-                return deny("fs.app_data");
-            }
-            let key = args.get("key").and_then(|v| v.as_str()).unwrap_or("");
-            // key 会被拼成文件名 —— 放行 `/`、`\`、`.` 就等于放行路径穿越
-            if key.is_empty() || key.len() > 128 || key.contains(['/', '\\', '.', '\0']) {
-                return Err("invalid_input: 非法的 storage key".into());
-            }
-            let dir = crate::data_dir(pod_id).join("kv");
-            std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-            let f = dir.join(format!("{key}.json"));
-            if verb == "storage.get" {
-                Ok(std::fs::read_to_string(&f)
-                    .ok()
-                    .and_then(|s| serde_json::from_str(&s).ok())
-                    .unwrap_or(Value::Null))
-            } else {
-                let v = args.get("value").cloned().unwrap_or(Value::Null);
-                std::fs::write(&f, v.to_string()).map_err(|e| e.to_string())?;
-                Ok(json!({ "ok": true }))
-            }
-        }
-        // 产出箱：程序舱把成品交给宿主，由宿主决定「给谁看、在哪看」。
-        // 不需要单独权限：交产物是把东西**给**用户，不是拿用户的东西。
-        "artifact.emit" => {
-            let data = args.get("data").and_then(|v| v.as_str()).unwrap_or("");
-            if data.is_empty() {
-                return Err("invalid_input: artifact.emit 缺少 data".into());
-            }
-            let a = crate::artifacts::emit(
-                pod_id,
-                args.get("action").and_then(|v| v.as_str()),
-                args.get("kind").and_then(|v| v.as_str()).unwrap_or("image"),
-                data,
-                args.get("message").and_then(|v| v.as_str()),
-            )?;
-            let path = crate::artifacts::path_of(&a.id).map(|p| p.display().to_string());
-            Ok(json!({
-                "id": a.id, "kind": a.kind, "w": a.w, "h": a.h, "bytes": a.bytes, "path": path
-            }))
-        }
-        "action" => {
-            let id = args.get("id").and_then(|v| v.as_str()).unwrap_or("");
-            let input = args.get("input").cloned().unwrap_or(json!({}));
-            if id.starts_with("app.") {
-                // 程序舱互调还没设计。明确拒绝好过含糊放行 —— 含糊放行会让第一个
-                // 用上它的人依赖一套没想清楚的语义，之后想改就是破坏性变更。
-                return Err("not_implemented: 程序舱之间互相调用尚未支持".into());
-            }
-            let allowed = crate::manifest::permissions(pod_id)
-                .map(|p| p.host_actions.iter().any(|h| h == id))
-                .unwrap_or(false);
-            if !allowed {
-                return Err(format!("permission_denied: 这个程序舱没有申请调用宿主动作 {id}"));
-            }
-            host.host_action(id, input)
-        }
-        // 图像原语不需要权限：它们只在内存里搬像素，碰不到网络也碰不到用户的盘。
-        // 真正要闸的是「图从哪来」（file.open）和「图往哪去」（file.save / artifact.emit）。
-        v if v.starts_with("image.") => crate::image::dispatch(&v[6..], args),
-        other => Err(format!("unknown_capability: {other}")),
-    }
+    let caps = Capabilities::builtin();
+    let ctx = CapCtx { pod_id, host, execution_id: "" };
+    caps.dispatch(&ctx, verb, args)
 }
 
 /// GUI 侧的一次能力请求（来自 `<scheme>://localhost/rpc/<pod-id>/<verb>`）。
@@ -257,9 +160,30 @@ pub fn run_action_with(
     input: Value,
     host: &dyn HostBridge,
 ) -> Result<Value, String> {
+    invoke(&Invocation::new(action_id, input), host, &Capabilities::builtin(), None)
+}
+
+/// 完整形态的调用 —— 影子（手机 / 远端）走这条。
+///
+/// 相比 [`run_action_with`] 多三样，全是影核 §10.3/§10.4 要的：带幂等键的重放、
+/// 带 `expected_state_version` 的乐观并发、以及贯穿始终的 `execution_id`。
+/// `caps` 让宿主装自己的能力，`state` 让宿主回答「那份状态现在什么版本」。
+pub fn invoke(
+    inv: &Invocation,
+    host: &dyn HostBridge,
+    caps: &Capabilities,
+    state: Option<&dyn StateResolver>,
+) -> Result<Value, String> {
     use std::io::{BufRead, BufReader, Write};
 
+    let action_id = inv.action_id.as_str();
     let pod_id = owner_of(action_id).ok_or_else(|| format!("unknown_action: {action_id}"))?;
+
+    // 副作用之前：版本对不对、是不是重放。两件事都可能直接终止本次调用。
+    if let Some(cached) = crate::invoke::guard(&pod_id, inv, state)? {
+        return Ok(cached);
+    }
+    let input = inv.input.clone();
     let dir = resolve_dir(&pod_id).ok_or_else(|| format!("unknown_action: {action_id}"))?;
     let (m, parity) = load_dir(&dir)?;
 
@@ -351,7 +275,11 @@ pub fn run_action_with(
         let resp = if over {
             json!({ "ok": false, "error": format!("quota_exceeded: 本轮最多调用 {max_calls} 次 AI") })
         } else {
-            match dispatch_capability(&pod_id, verb, &args, host) {
+            match caps.dispatch(
+                &CapCtx { pod_id: &pod_id, host, execution_id: &inv.execution_id },
+                verb,
+                &args,
+            ) {
                 Ok(d) => json!({ "ok": true, "data": d }),
                 Err(e) => json!({ "ok": false, "error": e }),
             }
@@ -371,7 +299,11 @@ pub fn run_action_with(
     let v: Value = serde_json::from_str(&out)
         .map_err(|_| format!("动作没有产出结果（Node 退出码 {:?}）", status.code()))?;
     if v.get("ok").and_then(|x| x.as_bool()) == Some(true) {
-        Ok(v.get("data").cloned().unwrap_or(Value::Null))
+        let data = v.get("data").cloned().unwrap_or(Value::Null);
+        // 只缓存成功的结果。失败也缓存的话，一次网络抖动导致的失败会被重放固化成
+        // 「这个键永远失败」，而重试正是调用方唯一的补救手段。
+        crate::invoke::replay_store(&pod_id, inv, &data);
+        Ok(data)
     } else {
         Err(v.get("error").and_then(|x| x.as_str()).unwrap_or("动作执行失败").to_string())
     }

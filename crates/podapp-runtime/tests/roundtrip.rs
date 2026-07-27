@@ -95,13 +95,13 @@ fn minimal_manifest(d: Dialect) -> Value {
 fn every_dialect_reads_into_the_same_model() {
     for build in [full_manifest as fn(Dialect) -> Value, minimal_manifest] {
         let from_pod = Manifest::from_json(&build(Dialect::PodApp)).expect("podapp 方言该能读");
-        let from_uking = Manifest::from_json(&build(Dialect::UKing)).expect("uking 方言该能读");
+        let from_uking = Manifest::from_json(&build(Dialect::MiniApp)).expect("uking 方言该能读");
 
         // 除了「我是哪种方言」这一个字段，两边归一化后必须逐字段相同
         assert_eq!(from_pod.dialect, Dialect::PodApp);
-        assert_eq!(from_uking.dialect, Dialect::UKing);
+        assert_eq!(from_uking.dialect, Dialect::MiniApp);
         assert_eq!(
-            from_pod.translated(Dialect::UKing),
+            from_pod.translated(Dialect::MiniApp),
             from_uking,
             "两种方言读出来的语义不一致 —— 两份标准开始分家了"
         );
@@ -112,7 +112,7 @@ fn every_dialect_reads_into_the_same_model() {
 fn translating_between_dialects_loses_nothing() {
     // uking → 内部模型 → podapp → 内部模型：两次归一化必须完全一致
     for build in [full_manifest as fn(Dialect) -> Value, minimal_manifest] {
-        let original = Manifest::from_json(&build(Dialect::UKing)).unwrap();
+        let original = Manifest::from_json(&build(Dialect::MiniApp)).unwrap();
         let as_podapp_json = original.to_json(Dialect::PodApp);
         let back = Manifest::from_json(&as_podapp_json).unwrap();
 
@@ -124,7 +124,7 @@ fn translating_between_dialects_loses_nothing() {
         );
 
         // 反向也要成立
-        let round = Manifest::from_json(&back.to_json(Dialect::UKing)).unwrap();
+        let round = Manifest::from_json(&back.to_json(Dialect::MiniApp)).unwrap();
         assert_eq!(original, round, "转回来对不上");
     }
 }
@@ -132,7 +132,7 @@ fn translating_between_dialects_loses_nothing() {
 #[test]
 fn unknown_top_level_keys_survive_a_round_trip() {
     // 上游加字段不该在一次读写往返里被我们悄悄吃掉 —— 悄悄吃掉比报错更难查
-    let m = Manifest::from_json(&full_manifest(Dialect::UKing)).unwrap();
+    let m = Manifest::from_json(&full_manifest(Dialect::MiniApp)).unwrap();
     let out = m.to_json(Dialect::PodApp);
     assert_eq!(out["market"]["category"], "image", "market 段被吃掉了");
     assert_eq!(out["$schema"], "https://example.invalid/schema.json", "$schema 被吃掉了");
@@ -140,15 +140,15 @@ fn unknown_top_level_keys_survive_a_round_trip() {
 
 #[test]
 fn the_identity_section_moves_to_the_right_key() {
-    let m = Manifest::from_json(&full_manifest(Dialect::UKing)).unwrap();
+    let m = Manifest::from_json(&full_manifest(Dialect::MiniApp)).unwrap();
 
     let as_pod = m.to_json(Dialect::PodApp);
     assert_eq!(as_pod["profile"], Dialect::PodApp.profile_const());
     assert_eq!(as_pod["pod"]["id"], "org.podapp.image.nine-grid");
     assert!(as_pod.get("app").is_none(), "podapp 方言不该还留着 app 段");
 
-    let as_uking = m.to_json(Dialect::UKing);
-    assert_eq!(as_uking["profile"], Dialect::UKing.profile_const());
+    let as_uking = m.to_json(Dialect::MiniApp);
+    assert_eq!(as_uking["profile"], Dialect::MiniApp.profile_const());
     assert_eq!(as_uking["app"]["id"], "org.podapp.image.nine-grid");
     assert!(as_uking.get("pod").is_none(), "uking 方言不该还留着 pod 段");
 }

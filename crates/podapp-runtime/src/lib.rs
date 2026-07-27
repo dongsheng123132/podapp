@@ -12,6 +12,32 @@
 //!
 //! **本 crate 没有网络代码，也从不读凭据文件**，所以它不可能泄露 Key（拿不到的东西泄不了）。
 //! AI / 文件 / 宿主动作等能力一律经 [`headless::HostBridge`] 由宿主注入。
+//!
+//! # 和影核（ActionParity）的关系
+//!
+//! **不是「基于影核之上再造一层」，本 crate 就是影核的一个实现。** 影核是 ActionParity
+//! 的中文名（ShadowCore 是搜索别名），不是它下面的子协议。每个程序舱带一份
+//! `action-parity.json`：动作 ID、`effects`、`execution`、`bindings` 全走那份规范，
+//! 两种方言共用它。
+//!
+//! 落到具体条款：
+//!
+//! | 影核要求 | 落在哪 |
+//! |---|---|
+//! | §5.1 一个动作一条实现路径 | [`headless::invoke`] —— GUI / CLI / 无头 / 影子同一条 |
+//! | §10.3 乐观并发，不许默认「最后写入者获胜」 | [`invoke::Invocation::expected_state_version`] |
+//! | §10.4 请求→结果→事件→日志同一个关联 ID | [`invoke::Invocation::execution_id`] |
+//! | 宪法 16 远程写要幂等键 | [`invoke::Invocation::idempotency_key`] |
+//!
+//! 装一个程序舱 = 给这台设备的动作面扩容。影子重新拉一次 [`manifest::action_specs`]
+//! 就发现了新能力，用同一个 `action_id` 调即可 —— **影核那边不需要为程序舱做任何改动**。
+//!
+//! # 可插拔
+//!
+//! 桥上的动词由 [`capability::Capabilities`] 注册表提供，不是写死的 `match`。
+//! 第三方加 `pdf.*` / `qr.scan` 只要实现 [`capability::Capability`] 再 `.with()` 进去，
+//! 不用改这个 crate。权限闸由注册表**统一执行一次** —— 提供方声明要什么权限，
+//! 但没有放行的权力。
 
 use std::path::PathBuf;
 use std::sync::OnceLock;
@@ -19,10 +45,12 @@ use std::sync::OnceLock;
 pub mod action_spec;
 pub mod artifacts;
 pub mod bridge;
+pub mod capability;
 pub mod dialect;
 pub mod headless;
 pub mod image;
 pub mod install;
+pub mod invoke;
 pub mod manifest;
 pub mod perms;
 pub mod registry;
@@ -30,8 +58,10 @@ pub mod selftest;
 pub mod serve;
 
 pub use action_spec::ActionSpec;
+pub use capability::{CapCtx, Capabilities, Capability};
 pub use dialect::Dialect;
 pub use headless::{HeadlessHost, HostBridge};
+pub use invoke::{Invocation, StateResolver};
 pub use manifest::{Manifest, PodInfo};
 pub use perms::{Cap, Perms};
 
@@ -82,7 +112,7 @@ impl HostProfile {
             bridge_global: "uking".into(),
             scheme: "uking".into(),
             host_version: host_version.into(),
-            dialect: Dialect::UKing,
+            dialect: Dialect::MiniApp,
         }
     }
 
