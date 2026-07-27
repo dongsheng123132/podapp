@@ -8,7 +8,7 @@ mod dock;
 mod host;
 mod protocol;
 
-use podapp_runtime::{HostProfile, PodInfo};
+use podapp_runtime::{Capabilities, HostProfile, PodInfo};
 use serde_json::Value;
 use tauri::{Emitter, Manager};
 #[cfg(desktop)]
@@ -26,6 +26,12 @@ pub struct DockStatus {
     capabilities: Vec<&'static str>,
 }
 
+/// 浮舱装了哪些能力。**只在这一处组装** —— 各处各建一份的话，
+/// 「界面里能调的动词」和「无头能调的动词」会悄悄不一样，而那正是 parity 要防的。
+fn capabilities() -> Capabilities {
+    Capabilities::builtin().with(podapp_qr::QrCapability)
+}
+
 #[tauri::command]
 fn dock_status() -> DockStatus {
     let host = dock::host_summary();
@@ -34,7 +40,7 @@ fn dock_status() -> DockStatus {
         attached: host.is_some(),
         host_title: host.map(|(t, _)| t),
         expanded: dock::is_expanded(),
-        capabilities: podapp_runtime::Capabilities::builtin().names(),
+        capabilities: capabilities().names(),
     }
 }
 
@@ -57,7 +63,12 @@ fn dock_uninstall(id: String, purge_data: bool) -> Result<(), String> {
 /// 无头跑一个动作。GUI 里点按钮和 AI 无头调用**走的是同一个函数**。
 #[tauri::command]
 fn dock_run(action_id: String, input: Value) -> Result<Value, String> {
-    podapp_runtime::headless::run_action_with(&action_id, input, &host::DockHost)
+    podapp_runtime::headless::invoke(
+        &podapp_runtime::Invocation::new(&action_id, input),
+        &host::DockHost,
+        &capabilities(),
+        None,
+    )
 }
 
 /// 打开一个程序舱的界面。
@@ -182,4 +193,33 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("浮舱起不来");
+}
+
+/// 界面侧的一次能力请求，用浮舱装配的能力集。
+///
+/// `podapp_runtime::headless::rpc` 用的是内置能力集，看不到浮舱额外注册的
+/// `qr.*` —— 界面能调而无头调不到（或反过来）正是 parity 要消灭的那种分叉，
+/// 所以两条路都从 [`capabilities`] 拿同一份。
+pub(crate) fn rpc_with_dock_capabilities(
+    pod_id: &str,
+    verb: &str,
+    args: &Value,
+    host: &dyn podapp_runtime::HostBridge,
+) -> Result<Value, String> {
+    use podapp_runtime::capability::CapCtx;
+    let caps = capabilities();
+    // 程序舱调自己的动作仍走动作总线，其余才是能力调用
+    if verb == "action" {
+        if let Some(id) = args.get("id").and_then(|v| v.as_str()) {
+            if podapp_runtime::manifest::owner_of(id).as_deref() == Some(pod_id) {
+                return podapp_runtime::headless::invoke(
+                    &podapp_runtime::Invocation::new(id, args.get("input").cloned().unwrap_or(Value::Null)),
+                    host,
+                    &caps,
+                    None,
+                );
+            }
+        }
+    }
+    caps.dispatch(&CapCtx { pod_id, host, execution_id: "" }, verb, args)
 }

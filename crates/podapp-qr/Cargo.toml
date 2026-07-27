@@ -1,0 +1,14 @@
+[package]
+name = "podapp-qr"
+version = "0.1.0"
+description = "二维码能力 —— 扫描与生成。以 Capability 形式注册进宿主，不进核心运行时。"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+podapp-runtime = { path = "../podapp-runtime" }
+serde_json.workspace = true
+# 纯 Rust，两个都不引 C 工具链 —— 和运行时其余依赖的口径一致
+rqrr = "0.10"
+qrcode = { version = "0.14", default-features = false }

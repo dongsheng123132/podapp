@@ -30,6 +30,8 @@ serde_json = "1"
 
 podapp-runtime = { path = "../../../crates/podapp-runtime" }
 podapp-win = { path = "../../../crates/podapp-win" }
+# 二维码能力：装在宿主这一侧，不进核心运行时。换个宿主不想要，去掉这一行即可。
+podapp-qr = { path = "../../../crates/podapp-qr" }
 
 [profile.release]
 opt-level = "z"

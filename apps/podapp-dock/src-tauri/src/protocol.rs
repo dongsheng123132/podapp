@@ -69,7 +69,8 @@ pub fn handle<R: tauri::Runtime>(
         let args: serde_json::Value =
             serde_json::from_slice(req.body()).unwrap_or(serde_json::Value::Null);
         let host = crate::host::DockHost;
-        return json_result(podapp_runtime::headless::rpc(pod_id, verb, &args, &host));
+        // 走浮舱那一份能力集 —— 界面这条路和无头那条路必须看到同样的动词
+        return json_result(crate::rpc_with_dock_capabilities(pod_id, verb, &args, &host));
     }
 
     if let Some(id) = path.strip_prefix("/artifact/") {
