@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>九宫格切图</title>
+    <style>
+      :root { --bg:#14161a; --fg:#e6e8ec; --dim:#8b93a1; --line:#262a31; --accent:#7c5cff; --bad:#fca5a5; }
+      * { box-sizing: border-box; }
+      body { margin:0; background:var(--bg); color:var(--fg);
+             font:14px/1.6 "Microsoft YaHei UI", system-ui, sans-serif;
+             display:flex; flex-direction:column; height:100vh; }
+      header { padding:14px 18px; border-bottom:1px solid var(--line); font-weight:600; }
+      main { flex:1; display:flex; min-height:0; }
+      #stage { flex:1; display:grid; place-items:center; padding:18px; min-width:0; }
+      #drop { border:1px dashed var(--line); border-radius:12px; padding:48px 32px;
+              text-align:center; color:var(--dim); }
+      #drop.over { border-color:var(--accent); color:var(--fg); }
+      #wrap { position:relative; max-width:100%; max-height:100%; }
+      #pic { display:block; max-width:100%; max-height:60vh; border-radius:6px; }
+      #grid { position:absolute; inset:0; pointer-events:none; }
+      aside { width:280px; border-left:1px solid var(--line); padding:16px; display:flex;
+              flex-direction:column; gap:14px; overflow-y:auto; }
+      label { display:block; font-size:12px; color:var(--dim); margin-bottom:4px; }
+      input[type=number] { width:100%; background:#0f1115; color:var(--fg);
+                           border:1px solid var(--line); border-radius:6px; padding:6px 8px; }
+      button { background:var(--accent); color:#fff; border:0; border-radius:8px;
+               padding:10px; font-size:14px; cursor:pointer; }
+      button:disabled { background:#3a3f4a; color:var(--dim); cursor:not-allowed; }
+      .hint { font-size:12px; color:var(--dim); }
+      .bad { color:var(--bad); }
+      ol { margin:0; padding-left:18px; font-size:12px; color:var(--dim); }
+    </style>
+  </head>
+  <body>
+    <header>九宫格切图</header>
+    <main>
+      <section id="stage">
+        <div id="drop">把图拖到这里，或按 Ctrl+V 粘贴</div>
+        <div id="wrap" hidden>
+          <img id="pic" alt="待切的图" />
+          <svg id="grid"></svg>
+        </div>
+      </section>
+      <aside>
+        <div>
+          <label for="rows">行</label>
+          <input id="rows" type="number" value="3" min="1" max="12" />
+        </div>
+        <div>
+          <label for="cols">列</label>
+          <input id="cols" type="number" value="3" min="1" max="12" />
+        </div>
+        <div>
+          <label for="gap">要丢掉的缝宽（px）</label>
+          <input id="gap" type="number" value="0" min="0" max="512" />
+          <div class="hint">AI 画的九宫格常自带白边，填上就切掉。</div>
+        </div>
+        <button id="go" disabled>开始切图</button>
+        <div id="msg" class="hint"></div>
+        <ol id="out"></ol>
+      </aside>
+    </main>
+
+    <script type="module">
+      // 预览线和真正切割**共用同一个 tiles()**。各画各的话，
+      // 「预览看着对、切出来不对」是最难解释的一类 bug。
+      import { tiles } from "./actions.mjs";
+
+      const $ = (id) => document.getElementById(id);
+      const [drop, wrap, pic, grid, go, msg, out] = ["drop","wrap","pic","grid","go","msg","out"].map($);
+      let dataUrl = null;
+
+      const nums = () => ({
+        rows: Math.max(1, Math.min(12, +$("rows").value || 3)),
+        cols: Math.max(1, Math.min(12, +$("cols").value || 3)),
+        gap: Math.max(0, Math.min(512, +$("gap").value || 0)),
+      });
+
+      function preview() {
+        if (!pic.naturalWidth) return;
+        const { rows, cols, gap } = nums();
+        const { naturalWidth: W, naturalHeight: H } = pic;
+        grid.setAttribute("viewBox", `0 0 ${W} ${H}`);
+        grid.innerHTML = tiles(W, H, rows, cols, gap)
+          .map((t) => `<rect x="${t.x}" y="${t.y}" width="${t.w}" height="${t.h}"
+                        fill="none" stroke="#7c5cff" stroke-width="${Math.max(1, W / 400)}"/>`)
+          .join("");
+      }
+
+      function load(file) {
+        const fr = new FileReader();
+        fr.onload = () => {
+          dataUrl = String(fr.result);
+          pic.src = dataUrl;
+          pic.onload = () => { drop.hidden = true; wrap.hidden = false; go.disabled = false; preview(); };
+        };
+        fr.readAsDataURL(file);
+      }
+
+      for (const ev of ["dragenter", "dragover"]) {
+        drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); });
+      }
+      drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+      document.addEventListener("drop", (e) => {
+        e.preventDefault();
+        drop.classList.remove("over");
+        const f = e.dataTransfer?.files?.[0];
+        if (f) load(f);
+      });
+      document.addEventListener("dragover", (e) => e.preventDefault());
+      document.addEventListener("paste", (e) => {
+        const f = [...(e.clipboardData?.items ?? [])].find((i) => i.type.startsWith("image/"));
+        if (f) load(f.getAsFile());
+      });
+      for (const id of ["rows", "cols", "gap"]) $(id).addEventListener("input", preview);
+
+      go.onclick = async () => {
+        go.disabled = true;
+        msg.className = "hint";
+        msg.textContent = "切图中…";
+        out.replaceChildren();
+        try {
+          // 走 pod.action —— 和 AI 无头调用**同一条路**，不是界面自己再实现一遍
+          const r = await pod.action("app.nine-grid.image.split", { image: dataUrl, ...nums() });
+          msg.textContent = r.message;
+          for (const t of r.tiles) {
+            const li = document.createElement("li");
+            li.textContent = `${t.row}-${t.col} · ${t.w}×${t.h}`;
+            out.append(li);
+          }
+        } catch (e) {
+          msg.className = "hint bad";
+          msg.textContent = String(e.message || e);
+        }
+        go.disabled = false;
+      };
+    </script>
+  </body>
+</html>

@@ -1,0 +1,64 @@
+{
+  "spec_version": "0.5.0",
+  "application": {
+    "id": "org.podapp.image.nine-grid",
+    "name": "九宫格切图",
+    "version": "0.1.0"
+  },
+  "surfaces": [
+    { "id": "pod", "kind": "gui", "required_for_parity": true },
+    { "id": "cli", "kind": "cli", "required_for_parity": true }
+  ],
+  "actions": [
+    {
+      "id": "app.nine-grid.image.split",
+      "title": "切九宫格",
+      "description": "Split one image into rows×cols independent tiles, discarding an optional gutter between them. Returns artifact references, not pixels.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["image"],
+        "properties": {
+          "image": {
+            "type": "string",
+            "minLength": 1,
+            "description": "data URL (base64) 或本机路径"
+          },
+          "rows": { "type": "integer", "minimum": 1, "maximum": 12 },
+          "cols": { "type": "integer", "minimum": 1, "maximum": 12 },
+          "gap": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 512,
+            "description": "格子之间要丢掉的缝宽（像素）。AI 画的九宫格常自带白边，用它切掉。"
+          }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "count": { "type": "integer" },
+          "cell": { "type": "object" },
+          "tiles": { "type": "array" }
+        }
+      },
+      "effects": {
+        "class": "read",
+        "risk": "low",
+        "reversible": true,
+        "confirmation": "never",
+        "audit_required": false
+      },
+      "execution": {
+        "headless": true,
+        "idempotent": true,
+        "cancellable": false,
+        "timeout_ms": 120000
+      },
+      "bindings": [
+        { "surface": "pod", "target": "pod-rpc:action/app.nine-grid.image.split" },
+        { "surface": "cli", "target": "cli:action run app.nine-grid.image.split --json" }
+      ]
+    }
+  ]
+}
