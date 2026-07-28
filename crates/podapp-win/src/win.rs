@@ -10,8 +10,7 @@ use windows_sys::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
 };
 use windows_sys::Win32::System::Threading::{
-    OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
-    PROCESS_QUERY_LIMITED_INFORMATION,
+    OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetWindow, GetWindowRect, GetWindowTextLengthW, GetWindowThreadProcessId,
@@ -20,7 +19,9 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 
 fn wide_to_string(buf: &[u16]) -> String {
     let end = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
-    std::ffi::OsString::from_wide(&buf[..end]).to_string_lossy().into_owned()
+    std::ffi::OsString::from_wide(&buf[..end])
+        .to_string_lossy()
+        .into_owned()
 }
 
 /// 一个进程的完整可执行文件路径。
@@ -92,7 +93,12 @@ fn window_rect(hwnd: HWND) -> Option<Rect> {
         if hr != 0 && GetWindowRect(hwnd, &mut r) == 0 {
             return None;
         }
-        Some(Rect { x: r.left, y: r.top, w: r.right - r.left, h: r.bottom - r.top })
+        Some(Rect {
+            x: r.left,
+            y: r.top,
+            w: r.right - r.left,
+            h: r.bottom - r.top,
+        })
     }
 }
 
@@ -152,11 +158,18 @@ unsafe extern "system" fn enum_proc(hwnd: HWND, lparam: LPARAM) -> i32 {
     if !scan.pids.contains(&pid) {
         return 1;
     }
-    let Some(rect) = window_rect(hwnd) else { return 1 };
+    let Some(rect) = window_rect(hwnd) else {
+        return 1;
+    };
     if scan.require_main_size && !rect.looks_like_a_real_window() {
         return 1;
     }
-    scan.found.push(HostWindow { hwnd: hwnd as isize, pid, title: window_title(hwnd), rect });
+    scan.found.push(HostWindow {
+        hwnd: hwnd as isize,
+        pid,
+        title: window_title(hwnd),
+        rect,
+    });
     1
 }
 
@@ -165,7 +178,11 @@ fn scan_windows(app: &HostApp, require_main_size: bool) -> Vec<HostWindow> {
     if pids.is_empty() {
         return vec![];
     }
-    let mut scan = Scan { pids, require_main_size, found: vec![] };
+    let mut scan = Scan {
+        pids,
+        require_main_size,
+        found: vec![],
+    };
     unsafe {
         EnumWindows(Some(enum_proc), &mut scan as *mut Scan as LPARAM);
     }
@@ -177,7 +194,9 @@ fn scan_windows(app: &HostApp, require_main_size: bool) -> Vec<HostWindow> {
 /// 多个候选时挑面积最大的那个：Chromium 系应用除了主窗口还会有若干辅助顶层窗口，
 /// 主窗口总是最大的那个。
 pub fn find_host_window(app: &HostApp) -> Option<HostWindow> {
-    scan_windows(app, true).into_iter().max_by_key(|w| (w.rect.w as i64) * (w.rect.h as i64))
+    scan_windows(app, true)
+        .into_iter()
+        .max_by_key(|w| (w.rect.w as i64) * (w.rect.h as i64))
 }
 
 /// 一个应用的**全部**可见顶层窗口，不做尺寸筛选。
@@ -276,10 +295,53 @@ pub fn work_area(near: Option<isize>) -> Rect {
         mi.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
         if GetMonitorInfoW(mon, &mut mi) == 0 {
             // 拿不到就给一个保守的默认，别让调用方拿到 0×0 去算除法
-            return Rect { x: 0, y: 0, w: 1920, h: 1080 };
+            return Rect {
+                x: 0,
+                y: 0,
+                w: 1920,
+                h: 1080,
+            };
         }
         let r = mi.rcWork;
-        Rect { x: r.left, y: r.top, w: r.right - r.left, h: r.bottom - r.top }
+        Rect {
+            x: r.left,
+            y: r.top,
+            w: r.right - r.left,
+            h: r.bottom - r.top,
+        }
+    }
+}
+
+/// 包含这个屏幕坐标的显示器工作区；点落在所有屏幕外时取最近的一块。
+///
+/// 自由漂浮窗口没有宿主 hwnd 可借，因此必须按窗口中心点选屏。仍然使用物理像素，
+/// 与 [`work_area`]、DWM 窗口矩形和 Tauri `PhysicalPosition` 保持同一坐标系。
+pub fn work_area_at(x: i32, y: i32) -> Rect {
+    use windows_sys::Win32::Graphics::Gdi::{
+        GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+    };
+    unsafe {
+        let mon = MonitorFromPoint(
+            windows_sys::Win32::Foundation::POINT { x, y },
+            MONITOR_DEFAULTTONEAREST,
+        );
+        let mut mi: MONITORINFO = std::mem::zeroed();
+        mi.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+        if GetMonitorInfoW(mon, &mut mi) == 0 {
+            return Rect {
+                x: 0,
+                y: 0,
+                w: 1920,
+                h: 1080,
+            };
+        }
+        let r = mi.rcWork;
+        Rect {
+            x: r.left,
+            y: r.top,
+            w: r.right - r.left,
+            h: r.bottom - r.top,
+        }
     }
 }
 
@@ -353,8 +415,7 @@ pub fn watch(app: HostApp, on_change: ChangeFn) -> Watcher {
 
     let thread = std::thread::spawn(move || unsafe {
         let mut current: Option<HostWindow> = None;
-        let mut hook: windows_sys::Win32::UI::Accessibility::HWINEVENTHOOK =
-            std::ptr::null_mut();
+        let mut hook: windows_sys::Win32::UI::Accessibility::HWINEVENTHOOK = std::ptr::null_mut();
         let mut hooked_pid = 0u32;
 
         while !stop2.load(Ordering::Relaxed) {
@@ -436,7 +497,10 @@ pub fn watch(app: HostApp, on_change: ChangeFn) -> Watcher {
         }
     });
 
-    Watcher { stop, thread: Some(thread) }
+    Watcher {
+        stop,
+        thread: Some(thread),
+    }
 }
 
 #[cfg(test)]
@@ -476,13 +540,28 @@ mod tests {
         // 没有宿主时取主屏；有宿主时取它所在那块屏。两条路都不许返回空矩形 ——
         // 拿 0×0 去算停靠位置，浮舱会缩成看不见的一条。
         let primary = work_area(None);
-        assert!(primary.looks_like_a_real_window(), "主屏工作区不合理: {primary:?}");
+        assert!(
+            primary.looks_like_a_real_window(),
+            "主屏工作区不合理: {primary:?}"
+        );
 
         if let Some(w) = find_host_window(&CODEX_APP) {
             let near = work_area(Some(w.hwnd));
-            assert!(near.looks_like_a_real_window(), "宿主所在屏工作区不合理: {near:?}");
-            assert!(w.rect.x >= near.x - 1 && w.rect.y >= near.y - 1, "宿主不在它自己那块屏里?");
+            assert!(
+                near.looks_like_a_real_window(),
+                "宿主所在屏工作区不合理: {near:?}"
+            );
+            assert!(
+                w.rect.x >= near.x - 1 && w.rect.y >= near.y - 1,
+                "宿主不在它自己那块屏里?"
+            );
         }
+
+        let at_origin = work_area_at(0, 0);
+        assert!(
+            at_origin.looks_like_a_real_window(),
+            "坐标所在工作区不合理: {at_origin:?}"
+        );
     }
 
     #[test]
@@ -492,14 +571,20 @@ mod tests {
         // 宿主右边缘报 2507，于是「右边还剩多少」算出 -459px —— 物理上不可能的数，
         // 而它推出的结论恰好还是对的，所以不盯着中间值看根本发现不了。
         ensure_dpi_aware();
-        let Some(w) = find_host_window(&CODEX_APP) else { return };
+        let Some(w) = find_host_window(&CODEX_APP) else {
+            return;
+        };
         let work = work_area(Some(w.hwnd));
 
         // MonitorFromWindow 是因为窗口在这块屏上才返回它的，所以两者必须真的相交。
         // 两个坐标系混着时，这个交集会算出负的宽或高。
         let ox = w.rect.right().min(work.right()) - w.rect.x.max(work.x);
         let oy = w.rect.bottom().min(work.bottom()) - w.rect.y.max(work.y);
-        assert!(ox > 0 && oy > 0, "窗口与它所在屏的工作区不相交，坐标系混了: {:?} vs {work:?}", w.rect);
+        assert!(
+            ox > 0 && oy > 0,
+            "窗口与它所在屏的工作区不相交，坐标系混了: {:?} vs {work:?}",
+            w.rect
+        );
 
         // 窗口不该比它所在的屏幕还大出一大截 —— 缩放比最高 1.5 左右，
         // 逻辑/物理混用会造成 25%~50% 的系统性偏差，这个阈值刚好卡在中间。
@@ -513,7 +598,9 @@ mod tests {
     #[test]
     fn found_window_is_plausible() {
         // Codex 没开着就跳过；开着的话，找到的必须是个像样的窗口
-        let Some(w) = find_host_window(&CODEX_APP) else { return };
+        let Some(w) = find_host_window(&CODEX_APP) else {
+            return;
+        };
         assert!(w.rect.looks_like_a_real_window(), "{:?}", w.rect);
         assert!(w.pid > 0);
         assert!(refresh(&w).is_some(), "刚找到的窗口该能刷新出位置");

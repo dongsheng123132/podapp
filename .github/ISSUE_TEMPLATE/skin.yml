@@ -1,0 +1,36 @@
+name: 皮肤展示
+description: 提交一套符合声明式规范的浮舱皮肤
+title: "[Skin] "
+labels: ["skin", "showcase"]
+body:
+  - type: input
+    id: skin_id
+    attributes:
+      label: 皮肤 ID 与版本
+      placeholder: org.example.skin.cat v0.1.0
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: JSON 或仓库链接
+    validations:
+      required: true
+  - type: textarea
+    id: preview
+    attributes:
+      label: 预览
+      description: 附收起态、展开态和皮肤面板截图。
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 自检
+      options:
+        - label: 只包含 podapp/dock-skin@0.1 允许的声明字段
+          required: true
+        - label: 标记、颜色与图案为原创或有明确许可
+          required: true
+        - label: 文字在背景和表面颜色上均清晰可读
+          required: true

@@ -1,0 +1,19 @@
+{
+  "spec": "podapp/dock-skin@0.1",
+  "id": "org.podapp.skin.minimal",
+  "name": "极简",
+  "author": "PodApp",
+  "version": "0.1.0",
+  "mark": "P",
+  "colors": {
+    "background": "#f4f5f6",
+    "surface": "#ffffff",
+    "foreground": "#202326",
+    "muted": "#697178",
+    "border": "#d6dadd",
+    "accent": "#1769aa",
+    "success": "#16845b",
+    "markBackground": "#dcebf5"
+  },
+  "radius": 8
+}

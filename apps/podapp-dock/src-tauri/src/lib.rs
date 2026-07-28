@@ -22,8 +22,11 @@ use tauri_plugin_global_shortcut::GlobalShortcutExt;
 pub struct DockStatus {
     pods: Vec<PodInfo>,
     attached: bool,
+    host_available: bool,
     host_title: Option<String>,
     expanded: bool,
+    placement: &'static str,
+    snap_edge: Option<&'static str>,
     /// 装了几个能力提供方，诊断用
     capabilities: Vec<&'static str>,
 }
@@ -153,12 +156,15 @@ fn install_missing_bundled_pods(app: &tauri::AppHandle) -> Vec<String> {
 
 #[tauri::command]
 fn dock_status() -> DockStatus {
-    let host = dock::host_summary();
+    let position = dock::placement_summary();
     DockStatus {
         pods: podapp_runtime::registry::list(),
-        attached: host.is_some(),
-        host_title: host.map(|(t, _)| t),
+        attached: position.attached,
+        host_available: position.host_available,
+        host_title: position.host_title,
         expanded: dock::is_expanded(),
+        placement: position.placement,
+        snap_edge: position.snap_edge,
         capabilities: capabilities().names(),
     }
 }
@@ -166,6 +172,36 @@ fn dock_status() -> DockStatus {
 #[tauri::command]
 fn dock_expand(app: tauri::AppHandle, on: bool) {
     dock::set_expanded(&app, on);
+}
+
+#[tauri::command]
+fn dock_finish_drag(app: tauri::AppHandle, x: i32, y: i32) -> dock::DockPlacement {
+    dock::finish_drag(&app, x, y)
+}
+
+#[tauri::command]
+fn dock_begin_drag() {
+    dock::begin_drag();
+}
+
+#[tauri::command]
+fn dock_cancel_drag() {
+    dock::cancel_drag();
+}
+
+#[tauri::command]
+fn dock_restore_free(
+    app: tauri::AppHandle,
+    x: i32,
+    y: i32,
+    edge: Option<String>,
+) -> dock::DockPlacement {
+    dock::restore_free(&app, x, y, edge.as_deref())
+}
+
+#[tauri::command]
+fn dock_attach(app: tauri::AppHandle) -> dock::DockPlacement {
+    dock::attach(&app)
 }
 
 /// 安装一个 `.pod`（或已解包的目录）。
@@ -308,6 +344,11 @@ fn dock_developer_prompt() -> &'static str {
     include_str!("../../../../docs/POD-DEVELOPMENT.md")
 }
 
+#[tauri::command]
+fn dock_skin_prompt() -> &'static str {
+    include_str!("../../../../docs/SKIN-DEVELOPMENT.md")
+}
+
 #[cfg(test)]
 mod pod_window_tests {
     #[test]
@@ -406,11 +447,17 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             dock_status,
             dock_expand,
+            dock_begin_drag,
+            dock_cancel_drag,
+            dock_finish_drag,
+            dock_restore_free,
+            dock_attach,
             dock_install,
             dock_uninstall,
             dock_run,
             dock_open_pod,
             dock_developer_prompt,
+            dock_skin_prompt,
             dock_artifacts,
         ])
         .setup(|app| {
@@ -428,15 +475,16 @@ pub fn run() {
             // 拖文件进来就装。这是「拖入即处理」的第一步，也是分发 .pod 的主路径。
             let h = handle.clone();
             if let Some(win) = app.get_webview_window(dock::DOCK_LABEL) {
-                win.on_window_event(move |e| {
-                    if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop {
-                        paths, ..
-                    }) = e
-                    {
+                win.on_window_event(move |e| match e {
+                    tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) => {
                         let files: Vec<String> =
                             paths.iter().map(|p| p.display().to_string()).collect();
                         let _ = h.emit("dock://dropped", files);
                     }
+                    tauri::WindowEvent::Moved(position) => {
+                        dock::note_window_moved(h.clone(), position.x, position.y);
+                    }
+                    _ => {}
                 });
             }
 

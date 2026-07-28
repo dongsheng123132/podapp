@@ -1,0 +1,52 @@
+name: Bug 报告
+description: 提交可复现的运行、安装、窗口或 Pod 问题
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: 安全漏洞请使用 Security 私密报告，不要在这里公开。
+  - type: input
+    id: version
+    attributes:
+      label: PodApp 版本
+      placeholder: 例如 0.1.0 / Commit SHA
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: 范围
+      options:
+        - 浮舱与窗口
+        - Pod 安装或运行
+        - 动作与权限
+        - 构建或发布
+        - 文档
+        - 其他
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 最小复现
+      description: 从干净启动开始，逐步写出操作和输入。
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望与实际结果
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 环境
+      placeholder: Windows 版本、缩放、多屏布局、Codex 版本
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 日志或截图
+      description: 删除密钥、用户名和真实用户数据后再上传。

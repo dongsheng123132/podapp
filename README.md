@@ -1,5 +1,10 @@
 # 泊舟 AI 小程序（PodApp）
 
+[English](./README_EN.md) | 简体中文
+
+[![CI](https://github.com/dongsheng123132/podapp/actions/workflows/ci.yml/badge.svg)](https://github.com/dongsheng123132/podapp/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
+
 > AI 负责生成，PodApp 负责完成。
 >
 > *AI generates. PodApp finishes.*
@@ -9,6 +14,20 @@ PodApp 就干这一件事：**把 AI 生成的不确定结果，交给确定的�
 
 一个**AI 小程序（Pod）**是一个有输入、参数、预览、确认、执行、验证、输出的确定性动作包。
 把 Codex 生成的图拖进浮舱，选一个动作，看预览，确认，拿到结果。
+
+产品名是**泊舟 PodApp**，品类是**桌面 AI 小程序运行舱**。它像浏览器插件和微信小程序，
+但动作同时开放给人、AI、CLI 与远端调用，不依赖某一个聊天客户端。
+
+## 浮在哪里由你决定
+
+- **吸附宿主**：跟随 Codex 主窗口移动；宿主关闭后退到当前屏幕右侧。
+- **自由漂浮**：拖动标题栏或小图标把手，停在任意位置。
+- **四边与四角磁吸**：接近左、右、上、下或任意角时自动贴边。
+- **位置记忆**：重启后恢复自由位置和磁吸边；一键重新吸附宿主。
+- **声明式皮肤**：内置泊舟、橘猫、极简，也可导入安全的 JSON 皮肤。
+
+皮肤不运行第三方 JavaScript/CSS，只允许标记、颜色和圆角。完整规范和交给 AI 的制作指令见
+[`docs/SKIN-DEVELOPMENT.md`](./docs/SKIN-DEVELOPMENT.md)。
 
 ## 现在能跑什么
 
@@ -44,6 +63,15 @@ pods/                      5 个官方 AI 小程序源码，随桌面壳首次�
 浮舱底部有“5 分钟做一个 Pod”入口，可以把完整开发指令直接复制给 Codex 或 Kimi。
 规范、最小清单、验证和打包命令见 [`docs/POD-DEVELOPMENT.md`](./docs/POD-DEVELOPMENT.md)；
 [`pods/memo`](./pods/memo) 是一份可运行的备忘贴参考实现。
+
+## 一起做
+
+不写 Rust 也能贡献：提交一套皮肤、做一个 Pod、补一种语言、复现一个 Bug 都可以。
+
+- [`CONTRIBUTING.md`](./CONTRIBUTING.md)：贡献路径与本地验证
+- [Pod 开发规范](./docs/POD-DEVELOPMENT.md) / [皮肤规范](./docs/SKIN-DEVELOPMENT.md)
+- [生态与增长路线](./docs/ECOSYSTEM.md) / [演示与参赛材料](./docs/SHOWCASE-KIT.md)
+- [Issues](https://github.com/dongsheng123132/podapp/issues) / [Releases](https://github.com/dongsheng123132/podapp/releases)
 
 ## 它是开放的吗
 

@@ -1,0 +1,19 @@
+{
+  "spec": "podapp/dock-skin@0.1",
+  "id": "org.podapp.skin.orange-cat",
+  "name": "橘猫",
+  "author": "PodApp",
+  "version": "0.1.0",
+  "mark": "🐈",
+  "colors": {
+    "background": "#191918",
+    "surface": "#242320",
+    "foreground": "#fff8e7",
+    "muted": "#aca89f",
+    "border": "#3a3832",
+    "accent": "#f2934a",
+    "success": "#71c59a",
+    "markBackground": "#55301f"
+  },
+  "radius": 14
+}

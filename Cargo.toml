@@ -5,7 +5,7 @@ members = ["crates/podapp-runtime", "crates/podapp-win", "crates/podapp-qr", "cr
 [workspace.package]
 edition = "2021"
 license = "Apache-2.0"
-repository = "https://github.com/podapp-ai/podapp"
+repository = "https://github.com/dongsheng123132/podapp"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }

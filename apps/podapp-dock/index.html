@@ -7,20 +7,26 @@
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <!-- 收起态：小船只负责展开；展开后通过标题栏拖动。 -->
-    <button id="boat" class="boat" title="点击展开 AI 小程序" aria-label="展开 AI 小程序">🚤</button>
+    <div id="boatShell" class="boat-shell edge-right">
+      <button id="boat" class="boat" type="button" title="打开泊舟" aria-label="打开泊舟">
+        <span id="boatMark" aria-hidden="true">🚤</span>
+      </button>
+      <span class="drag-grip" title="拖动"></span>
+    </div>
 
-    <!-- 展开态 -->
-    <section id="panel" class="panel" hidden>
-      <header class="bar" data-tauri-drag-region>
-        <span class="brand">🚤 泊舟 AI 小程序</span>
-        <span id="attach" class="attach">未吸附</span>
-        <button id="collapse" class="icon" title="收起">－</button>
+    <section id="panel" class="panel edge-right" hidden>
+      <header id="dragBar" class="bar">
+        <span id="brandMark" class="brand-mark" aria-hidden="true">🚤</span>
+        <span class="brand">泊舟</span>
+        <span id="attach" class="attach">等待宿主</span>
+        <button id="reattach" class="icon" type="button" title="重新吸附宿主" aria-label="重新吸附宿主" hidden>⌁</button>
+        <button id="skins" class="icon" type="button" title="皮肤" aria-label="皮肤">◐</button>
+        <button id="collapse" class="icon" type="button" title="收起" aria-label="收起">−</button>
       </header>
 
       <div id="home" class="home">
         <div id="drop" class="drop">
-          把 AI 生成的图 / 网页 / <code>.pod</code> 小程序包拖到这里
+          拖入图像、网页或 <code>.pod</code>
         </div>
 
         <ul id="pods" class="pods"></ul>
@@ -28,28 +34,42 @@
         <footer class="foot">
           <button id="developer" class="developer-launch" type="button">
             <span aria-hidden="true">＋</span>
-            <span><b>5 分钟做一个 Pod</b><small>复制规范给 AI，生成后拖入安装</small></span>
+            <span><b>制作 Pod</b><small>把开发规范交给 AI</small></span>
           </button>
           <span id="caps" class="caps"></span>
         </footer>
       </div>
 
-      <section id="developerPanel" class="developer-panel" hidden>
-        <header class="developer-head">
+      <section id="developerPanel" class="subview" hidden>
+        <header class="subview-head">
           <button id="developerBack" class="back" type="button" title="返回" aria-label="返回">←</button>
-          <div><b>交给 AI 制作</b><span>一份指令包含结构、规范、验证与安装步骤</span></div>
+          <div><b>交给 AI 制作</b><span>规范、验证与打包已合并成一份指令</span></div>
         </header>
         <ol class="developer-steps">
-          <li><i>1</i><span><b>复制完整指令</b><small>规范已写好，只需补一句用途</small></span></li>
-          <li><i>2</i><span><b>发给 Codex 或 Kimi</b><small>让 AI 创建可验证的 <code>.pod</code></small></span></li>
-          <li><i>3</i><span><b>拖回舟舱安装</b><small>程序舱与 AI 共用同一套动作</small></span></li>
+          <li><i>1</i><span><b>复制指令</b><small>补一句用途</small></span></li>
+          <li><i>2</i><span><b>交给 Codex 或 Kimi</b><small>生成可验证的 <code>.pod</code></small></span></li>
+          <li><i>3</i><span><b>拖入泊舟</b><small>安装并运行</small></span></li>
         </ol>
         <div class="developer-example">
-          <span>示例需求</span>
+          <span>示例</span>
           <p>做一个小备忘录：能新建、自动保存、删除，AI 也可以增删查。</p>
         </div>
-        <button id="copyDeveloperPrompt" class="copy-prompt" type="button">复制完整开发指令</button>
-        <p id="copyStatus" class="copy-status">复制后，把第一行改成你想做的小工具。</p>
+        <button id="copyDeveloperPrompt" class="primary" type="button">复制完整开发指令</button>
+        <p id="copyStatus" class="hint">复制后修改第一行需求。</p>
+      </section>
+
+      <section id="skinPanel" class="subview" hidden>
+        <header class="subview-head">
+          <button id="skinBack" class="back" type="button" title="返回" aria-label="返回">←</button>
+          <div><b>皮肤</b><span>仅颜色、标记和圆角，不执行第三方代码</span></div>
+        </header>
+        <div id="skinList" class="skin-list"></div>
+        <div class="skin-actions">
+          <button id="importSkin" class="secondary" type="button">导入 JSON</button>
+          <button id="copySkinPrompt" class="secondary" type="button">交给 AI 制作</button>
+          <input id="skinFile" type="file" accept=".json,.dock-skin.json,application/json" hidden />
+        </div>
+        <p id="skinStatus" class="hint">兼容 podapp/dock-skin@0.1</p>
       </section>
     </section>
 

@@ -1,0 +1,19 @@
+{
+  "spec": "podapp/dock-skin@0.1",
+  "id": "org.podapp.skin.boat",
+  "name": "泊舟",
+  "author": "PodApp",
+  "version": "0.1.0",
+  "mark": "🚤",
+  "colors": {
+    "background": "#14171a",
+    "surface": "#1b2024",
+    "foreground": "#edf1f2",
+    "muted": "#92a0a5",
+    "border": "#2b3338",
+    "accent": "#27b58b",
+    "success": "#56d39b",
+    "markBackground": "#173d38"
+  },
+  "radius": 12
+}

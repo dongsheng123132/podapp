@@ -1,0 +1,42 @@
+name: Pod 提案
+description: 提议一个可安装、可由 AI 调用的新 Pod
+title: "[Pod] "
+labels: ["pod"]
+body:
+  - type: input
+    id: problem
+    attributes:
+      label: 一句话问题
+      description: 谁在什么情况下需要它？
+    validations:
+      required: true
+  - type: textarea
+    id: workflow
+    attributes:
+      label: 主流程
+      description: 输入、预览、确认、执行和输出分别是什么？
+    validations:
+      required: true
+  - type: textarea
+    id: actions
+    attributes:
+      label: Action ID
+      placeholder: app.<slug>.<domain>.<verb>
+    validations:
+      required: true
+  - type: textarea
+    id: permissions
+    attributes:
+      label: 所需权限
+      description: 文件、网络、AI、宿主动作；没有也请写“无”。
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 自检
+      options:
+        - label: 业务动作会由 GUI 与 AI 共用同一实现
+          required: true
+        - label: 我会提供 validate、无头调用和打包结果
+          required: true

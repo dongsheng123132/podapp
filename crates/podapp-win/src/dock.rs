@@ -43,11 +43,18 @@ impl Metrics {
     /// 带上本机平台下限的一份参数。
     #[cfg(windows)]
     pub fn platform() -> Self {
-        Self { min_w: crate::min_window_width(), ..Default::default() }
+        Self {
+            min_w: crate::min_window_width(),
+            ..Default::default()
+        }
     }
 
-    fn width(&self, expanded: bool) -> i32 {
-        let w = if expanded { self.expanded_w } else { self.collapsed_w };
+    pub fn width(&self, expanded: bool) -> i32 {
+        let w = if expanded {
+            self.expanded_w
+        } else {
+            self.collapsed_w
+        };
         w.max(self.min_w)
     }
 }
@@ -64,6 +71,133 @@ pub enum Anchor {
 pub struct Placement {
     pub rect: Rect,
     pub anchor: Anchor,
+}
+
+/// 自由漂浮时吸附到工作区的哪一边。
+///
+/// 角是独立状态，而不是让调用方同时保存两条边。这样持久化格式稳定，
+/// 展开/收起改变尺寸时也不会丢掉其中一条边。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SnapEdge {
+    Left,
+    Right,
+    Top,
+    Bottom,
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
+}
+
+impl SnapEdge {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Left => "left",
+            Self::Right => "right",
+            Self::Top => "top",
+            Self::Bottom => "bottom",
+            Self::TopLeft => "top-left",
+            Self::TopRight => "top-right",
+            Self::BottomLeft => "bottom-left",
+            Self::BottomRight => "bottom-right",
+        }
+    }
+}
+
+fn clamp_axis(value: i32, start: i32, extent: i32, size: i32) -> i32 {
+    if size >= extent {
+        start
+    } else {
+        value.clamp(start, start + extent - size)
+    }
+}
+
+/// 将用户拖到的新位置限制在工作区内，并在靠近边缘时产生磁吸。
+///
+/// `threshold` 是物理像素。传 0 仍会把已经越界的窗口吸回最近边缘，
+/// 因而任何调用都不会留下一个够不着的窗口。
+pub fn snap_to_work_area(rect: Rect, work: Rect, threshold: i32) -> (Rect, Option<SnapEdge>) {
+    let w = rect.w.clamp(1, work.w.max(1));
+    let h = rect.h.clamp(1, work.h.max(1));
+    let right = rect.x.saturating_add(w);
+    let bottom = rect.y.saturating_add(h);
+    let threshold = threshold.max(0);
+
+    let near_left = rect.x <= work.x || (rect.x - work.x).abs() <= threshold;
+    let near_right =
+        right >= work.right() || (work.right().saturating_sub(right)).abs() <= threshold;
+    let near_top = rect.y <= work.y || (rect.y - work.y).abs() <= threshold;
+    let near_bottom =
+        bottom >= work.bottom() || (work.bottom().saturating_sub(bottom)).abs() <= threshold;
+
+    let horizontal = match (near_left, near_right) {
+        (true, true) => {
+            let left_gap = (rect.x - work.x).abs();
+            let right_gap = (work.right().saturating_sub(right)).abs();
+            Some(if left_gap <= right_gap {
+                SnapEdge::Left
+            } else {
+                SnapEdge::Right
+            })
+        }
+        (true, false) => Some(SnapEdge::Left),
+        (false, true) => Some(SnapEdge::Right),
+        (false, false) => None,
+    };
+    let vertical = match (near_top, near_bottom) {
+        (true, true) => {
+            let top_gap = (rect.y - work.y).abs();
+            let bottom_gap = (work.bottom().saturating_sub(bottom)).abs();
+            Some(if top_gap <= bottom_gap {
+                SnapEdge::Top
+            } else {
+                SnapEdge::Bottom
+            })
+        }
+        (true, false) => Some(SnapEdge::Top),
+        (false, true) => Some(SnapEdge::Bottom),
+        (false, false) => None,
+    };
+
+    let edge = match (horizontal, vertical) {
+        (Some(SnapEdge::Left), Some(SnapEdge::Top)) => Some(SnapEdge::TopLeft),
+        (Some(SnapEdge::Right), Some(SnapEdge::Top)) => Some(SnapEdge::TopRight),
+        (Some(SnapEdge::Left), Some(SnapEdge::Bottom)) => Some(SnapEdge::BottomLeft),
+        (Some(SnapEdge::Right), Some(SnapEdge::Bottom)) => Some(SnapEdge::BottomRight),
+        (Some(edge), None) | (None, Some(edge)) => Some(edge),
+        _ => None,
+    };
+
+    (resize_at_snap(rect, w, h, edge, work), edge)
+}
+
+/// 改变自由窗口尺寸，同时保持已吸附的边或角不动。
+pub fn resize_at_snap(
+    rect: Rect,
+    width: i32,
+    height: i32,
+    edge: Option<SnapEdge>,
+    work: Rect,
+) -> Rect {
+    let w = width.clamp(1, work.w.max(1));
+    let h = height.clamp(1, work.h.max(1));
+    let mut x = clamp_axis(rect.x, work.x, work.w, w);
+    let mut y = clamp_axis(rect.y, work.y, work.h, h);
+
+    match edge {
+        Some(SnapEdge::Left | SnapEdge::TopLeft | SnapEdge::BottomLeft) => x = work.x,
+        Some(SnapEdge::Right | SnapEdge::TopRight | SnapEdge::BottomRight) => x = work.right() - w,
+        _ => {}
+    }
+    match edge {
+        Some(SnapEdge::Top | SnapEdge::TopLeft | SnapEdge::TopRight) => y = work.y,
+        Some(SnapEdge::Bottom | SnapEdge::BottomLeft | SnapEdge::BottomRight) => {
+            y = work.bottom() - h
+        }
+        _ => {}
+    }
+
+    Rect { x, y, w, h }
 }
 
 /// 算浮舱应该在哪。
@@ -101,7 +235,10 @@ pub fn place(host: Option<Rect>, work: Rect, expanded: bool, m: Metrics) -> Plac
         m.collapsed_h.min(available_h).max(1)
     };
 
-    Placement { rect: Rect { x, y, w, h }, anchor }
+    Placement {
+        rect: Rect { x, y, w, h },
+        anchor,
+    }
 }
 
 #[cfg(test)]
@@ -109,13 +246,23 @@ mod tests {
     use super::*;
 
     fn work() -> Rect {
-        Rect { x: 0, y: 0, w: 2560, h: 1400 }
+        Rect {
+            x: 0,
+            y: 0,
+            w: 2560,
+            h: 1400,
+        }
     }
 
     #[test]
     fn snaps_beside_the_host_when_there_is_room() {
         // 宿主右边留了 500px，够放下 380 的浮舱 —— 这时不该压在宿主上
-        let host = Rect { x: 200, y: 250, w: 1800, h: 1025 };
+        let host = Rect {
+            x: 200,
+            y: 250,
+            w: 1800,
+            h: 1025,
+        };
         let p = place(Some(host), work(), true, Metrics::default());
         assert_eq!(p.anchor, Anchor::HostRight);
         assert_eq!(p.rect.x, 2000, "该紧贴宿主右边缘");
@@ -132,7 +279,12 @@ mod tests {
         // 这**不是**边缘情况，而是常态：单屏用户的 Codex 多半是最大化或占大半屏。
         // 所以这里的选择是压在宿主右侧上方（像 Raycast 那类浮层），
         // 而不是把浮舱推出屏幕 —— 看不见的窗口对用户等于程序坏了。
-        let host = Rect { x: 999, y: 250, w: 1508, h: 1025 };
+        let host = Rect {
+            x: 999,
+            y: 250,
+            w: 1508,
+            h: 1025,
+        };
         let p = place(Some(host), work(), true, Metrics::default());
         assert_eq!(p.rect.right(), work().right(), "贴住屏幕右缘");
         assert!(p.rect.x < host.right(), "确实压在宿主上");
@@ -152,7 +304,12 @@ mod tests {
 
     #[test]
     fn collapsed_dock_is_button_height_even_when_the_host_is_tall() {
-        let host = Rect { x: 200, y: 250, w: 1800, h: 1025 };
+        let host = Rect {
+            x: 200,
+            y: 250,
+            w: 1800,
+            h: 1025,
+        };
         let p = place(Some(host), work(), false, Metrics::default());
         assert_eq!(p.rect.y, host.y, "收起和展开共用顶部锚点");
         assert_eq!(p.rect.h, DOCK_HEIGHT_COLLAPSED, "收起态不能留一整条黑栏");
@@ -162,9 +319,24 @@ mod tests {
     fn never_lands_off_screen_even_if_the_host_fills_it() {
         // 宿主最大化 / 比屏幕还宽时，右边没地方了 —— 压在宿主上，而不是飞到屏幕外
         for host in [
-            Rect { x: 0, y: 0, w: 2560, h: 1400 },   // 正好占满
-            Rect { x: 0, y: 0, w: 4000, h: 1400 },   // 比屏幕还宽
-            Rect { x: 2400, y: 0, w: 1000, h: 1400 } // 大半在屏幕外
+            Rect {
+                x: 0,
+                y: 0,
+                w: 2560,
+                h: 1400,
+            }, // 正好占满
+            Rect {
+                x: 0,
+                y: 0,
+                w: 4000,
+                h: 1400,
+            }, // 比屏幕还宽
+            Rect {
+                x: 2400,
+                y: 0,
+                w: 1000,
+                h: 1400,
+            }, // 大半在屏幕外
         ] {
             let p = place(Some(host), work(), true, Metrics::default());
             assert!(p.rect.x >= work().x, "跑到屏幕左外了: {p:?}");
@@ -175,15 +347,28 @@ mod tests {
     #[test]
     fn a_host_above_the_work_area_does_not_drag_the_dock_up() {
         // 宿主标题栏被拖到屏幕上方之外时，浮舱顶部仍应留在工作区内
-        let host = Rect { x: 100, y: -300, w: 800, h: 900 };
+        let host = Rect {
+            x: 100,
+            y: -300,
+            w: 800,
+            h: 900,
+        };
         let p = place(Some(host), work(), true, Metrics::default());
         assert!(p.rect.y >= work().y, "浮舱顶部跑到工作区上方了: {p:?}");
-        assert!(p.rect.bottom() <= work().bottom(), "浮舱底部超出工作区了: {p:?}");
+        assert!(
+            p.rect.bottom() <= work().bottom(),
+            "浮舱底部超出工作区了: {p:?}"
+        );
     }
 
     #[test]
     fn a_very_short_host_still_leaves_a_usable_dock() {
-        let host = Rect { x: 100, y: 100, w: 800, h: 20 };
+        let host = Rect {
+            x: 100,
+            y: 100,
+            w: 800,
+            h: 20,
+        };
         let p = place(Some(host), work(), true, Metrics::default());
         assert!(p.rect.h >= 120, "浮舱被挤成一条了: {p:?}");
     }
@@ -195,8 +380,16 @@ mod tests {
         //
         // 所以不跟系统较劲，把下限算进来。**关键是「算出来的」要等于「实际的」**：
         // 假装自己是 64 而系统给 170，会让停靠位置差 106px，而没有任何报错。
-        let m = Metrics { min_w: 170, ..Default::default() };
-        let host = Rect { x: 200, y: 250, w: 1800, h: 1025 };
+        let m = Metrics {
+            min_w: 170,
+            ..Default::default()
+        };
+        let host = Rect {
+            x: 200,
+            y: 250,
+            w: 1800,
+            h: 1025,
+        };
 
         let c = place(Some(host), work(), false, m);
         assert_eq!(c.rect.w, 170, "收起宽度该被抬到平台下限");
@@ -214,17 +407,165 @@ mod tests {
     fn collapsing_grows_from_a_stable_edge() {
         // 收起/展开只该改宽度，不该让浮舱整个跳到别处。
         // 「哪条边不动」取决于有没有被屏幕挤住，两种情况都要成立：
-        let host_roomy = Rect { x: 200, y: 250, w: 1800, h: 1025 };
+        let host_roomy = Rect {
+            x: 200,
+            y: 250,
+            w: 1800,
+            h: 1025,
+        };
         let e = place(Some(host_roomy), work(), true, Metrics::default());
         let c = place(Some(host_roomy), work(), false, Metrics::default());
         assert_eq!(e.rect.x, c.rect.x, "有地方时贴着宿主，左边缘不动、向右长");
         assert_eq!(e.anchor, c.anchor);
         assert!(c.rect.w < e.rect.w);
 
-        let host_tight = Rect { x: 999, y: 250, w: 1508, h: 1025 };
+        let host_tight = Rect {
+            x: 999,
+            y: 250,
+            w: 1508,
+            h: 1025,
+        };
         let e = place(Some(host_tight), work(), true, Metrics::default());
         let c = place(Some(host_tight), work(), false, Metrics::default());
-        assert_eq!(e.rect.right(), c.rect.right(), "被挤住时贴着屏幕右缘，右边缘不动、向左长");
+        assert_eq!(
+            e.rect.right(),
+            c.rect.right(),
+            "被挤住时贴着屏幕右缘，右边缘不动、向左长"
+        );
         assert_eq!(e.rect.y, c.rect.y, "上下位置任何时候都不该跳");
+    }
+
+    #[test]
+    fn free_window_snaps_to_all_sides_and_corners() {
+        let cases = [
+            (
+                Rect {
+                    x: 10,
+                    y: 500,
+                    w: 300,
+                    h: 200,
+                },
+                SnapEdge::Left,
+            ),
+            (
+                Rect {
+                    x: 2255,
+                    y: 500,
+                    w: 300,
+                    h: 200,
+                },
+                SnapEdge::Right,
+            ),
+            (
+                Rect {
+                    x: 500,
+                    y: 8,
+                    w: 300,
+                    h: 200,
+                },
+                SnapEdge::Top,
+            ),
+            (
+                Rect {
+                    x: 500,
+                    y: 1194,
+                    w: 300,
+                    h: 200,
+                },
+                SnapEdge::Bottom,
+            ),
+            (
+                Rect {
+                    x: 8,
+                    y: 8,
+                    w: 300,
+                    h: 200,
+                },
+                SnapEdge::TopLeft,
+            ),
+            (
+                Rect {
+                    x: 2255,
+                    y: 8,
+                    w: 300,
+                    h: 200,
+                },
+                SnapEdge::TopRight,
+            ),
+            (
+                Rect {
+                    x: 8,
+                    y: 1194,
+                    w: 300,
+                    h: 200,
+                },
+                SnapEdge::BottomLeft,
+            ),
+            (
+                Rect {
+                    x: 2255,
+                    y: 1194,
+                    w: 300,
+                    h: 200,
+                },
+                SnapEdge::BottomRight,
+            ),
+        ];
+
+        for (rect, want) in cases {
+            let (got, edge) = snap_to_work_area(rect, work(), 24);
+            assert_eq!(edge, Some(want), "{rect:?}");
+            assert!(got.x >= work().x && got.right() <= work().right());
+            assert!(got.y >= work().y && got.bottom() <= work().bottom());
+        }
+    }
+
+    #[test]
+    fn free_window_can_stay_in_the_middle() {
+        let rect = Rect {
+            x: 600,
+            y: 420,
+            w: 300,
+            h: 200,
+        };
+        assert_eq!(snap_to_work_area(rect, work(), 24), (rect, None));
+    }
+
+    #[test]
+    fn resizing_keeps_the_selected_corner_fixed() {
+        let small = Rect {
+            x: 2390,
+            y: 1336,
+            w: 170,
+            h: 64,
+        };
+        let large = resize_at_snap(
+            small,
+            DOCK_WIDTH_EXPANDED,
+            720,
+            Some(SnapEdge::BottomRight),
+            work(),
+        );
+        assert_eq!(large.right(), work().right());
+        assert_eq!(large.bottom(), work().bottom());
+        assert_eq!(large.w, DOCK_WIDTH_EXPANDED);
+        assert_eq!(large.h, 720);
+    }
+
+    #[test]
+    fn dragging_outside_is_clamped_back_into_view() {
+        let (rect, edge) = snap_to_work_area(
+            Rect {
+                x: -900,
+                y: 1700,
+                w: 300,
+                h: 200,
+            },
+            work(),
+            24,
+        );
+        assert_eq!(rect.x, work().x);
+        assert_eq!(rect.bottom(), work().bottom());
+        assert_eq!(edge, Some(SnapEdge::BottomLeft));
     }
 }
