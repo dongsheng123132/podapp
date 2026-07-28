@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "泊舟 AI 小程序",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "identifier": "org.podapp.dock",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -30,9 +30,21 @@
       "csp": null
     }
   },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://u-claw.org.cn/podapp/latest.json",
+        "https://cloud.u-claw.org/podapp/latest.json",
+        "https://github.com/dongsheng123132/podapp/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEVGRUE4RkIyMTNFNTJDM0YKUldRL0xPVVRzby9xN3hyaS9rb3ZMc3NnUE1DdzJndDdvcDB5ZTZ6d3ZKTEViMXA5NjYrY3IwNE4K",
+      "windows": { "installMode": "passive" }
+    }
+  },
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "createUpdaterArtifacts": true,
     "resources": {
       "../../../pods": "pods"
     },

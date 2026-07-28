@@ -2,6 +2,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { PhysicalPosition } from "@tauri-apps/api/dpi";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { relaunch } from "@tauri-apps/plugin-process";
+import { check } from "@tauri-apps/plugin-updater";
 import {
   applySkin,
   builtinSkins,
@@ -454,5 +457,53 @@ listen<DockPlacement>("dock://placed", (event) => {
   refresh();
 });
 
+/**
+ * 检查更新。
+ *
+ * **查不到就当没有，绝不打扰。** 更新端点有三个（国内域名在前、GitHub 兜底），
+ * 但用户可能在裸网、代理坏了、或者三个都不通 —— 那是常态不是异常，
+ * 弹个「检查更新失败」只会让人以为程序坏了。真有新版才让那个按钮出现。
+ *
+ * 也**不自动装**：浮舱是贴着 Codex 用的，装更新要重启，
+ * 在用户正干活时自己重启是最招人烦的一种「贴心」。
+ */
+async function checkForUpdate() {
+  const button = $("update") as HTMLButtonElement;
+  let update;
+  try {
+    update = await check();
+  } catch {
+    return; // 网络不通 / 端点没上线 —— 静默
+  }
+  if (!update) return;
+
+  button.textContent = `有新版 ${update.version} · 点此更新`;
+  button.hidden = false;
+  button.onclick = async () => {
+    button.disabled = true;
+    try {
+      // 进度只更新按钮上的字，不另开弹窗 —— 浮舱只有 380px 宽，弹窗会盖住全部内容
+      let got = 0;
+      await update.downloadAndInstall((e) => {
+        if (e.event === "Started") button.textContent = "正在下载…";
+        else if (e.event === "Progress") {
+          got += e.data.chunkLength;
+          button.textContent = `正在下载… ${Math.round(got / 1024)} KB`;
+        } else if (e.event === "Finished") button.textContent = "正在安装…";
+      });
+      await relaunch();
+    } catch (error) {
+      // 失败要说人话并且**留一条能自己走的路**，别只说「更新失败」
+      button.textContent = "更新失败，点此手动下载";
+      button.disabled = false;
+      button.onclick = () => openUrl(RELEASES_URL).catch(warn);
+      warn(error);
+    }
+  };
+}
+
+const RELEASES_URL = "https://github.com/dongsheng123132/podapp/releases/latest";
+
 applySavedSkin();
 restorePosition().then(refresh);
+checkForUpdate();

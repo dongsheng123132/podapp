@@ -449,6 +449,12 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        // 自更新。**端点是多个、按顺序回退的**：国内域名在前、GitHub 兜底 ——
+        // 只指 GitHub 的话国内用户基本更新不到（U-King 的 installer.rs 里有同样的
+        // 教训注释：cloud.u-claw.org 在部分网络会被 SNI reset）。
+        // 开发机有代理，感觉不到这件事，所以这条不能靠「我这能行」来验。
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .register_uri_scheme_protocol("podapp", protocol::handle)
         .invoke_handler(tauri::generate_handler![
             dock_status,
