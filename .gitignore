@@ -4,3 +4,7 @@ dist/
 .DS_Store
 apps/*/src-tauri/target/
 apps/*/src-tauri/gen/
+
+# 官网是生成物（scripts/build-site.mjs 从 pods/*/podapp.json 生成）。
+# 生成物不进仓库 —— 进了就会有人手改网页而不改清单，两边从此对不上。
+website/
