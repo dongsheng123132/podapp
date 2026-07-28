@@ -28,10 +28,34 @@ const attach = $<HTMLSpanElement>("attach");
 const podList = $<HTMLUListElement>("pods");
 const drop = $<HTMLDivElement>("drop");
 const caps = $<HTMLSpanElement>("caps");
+const home = $<HTMLElement>("home");
+const developerPanel = $<HTMLElement>("developerPanel");
+const copyPrompt = $<HTMLButtonElement>("copyDeveloperPrompt");
+const copyStatus = $<HTMLParagraphElement>("copyStatus");
+let developerOpen = false;
+let developerPrompt = "";
+
+async function writeClipboard(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.append(textarea);
+    textarea.select();
+    const copied = document.execCommand("copy");
+    textarea.remove();
+    if (!copied) throw new Error("复制失败，请检查系统剪贴板权限");
+  }
+}
 
 function render(s: DockStatus) {
   boat.hidden = s.expanded;
   panel.hidden = !s.expanded;
+  home.hidden = !s.expanded || developerOpen;
+  developerPanel.hidden = !s.expanded || !developerOpen;
 
   attach.textContent = s.attached ? `已吸附 · ${s.host_title ?? ""}` : "独立模式";
   attach.classList.toggle("on", s.attached);
@@ -84,7 +108,39 @@ async function refresh() {
 }
 
 boat.onclick = () => invoke("dock_expand", { on: true }).then(refresh).catch(warn);
-$("collapse").onclick = () => invoke("dock_expand", { on: false }).then(refresh).catch(warn);
+$("collapse").onclick = () => {
+  developerOpen = false;
+  invoke("dock_expand", { on: false }).then(refresh).catch(warn);
+};
+
+$("developer").onclick = async () => {
+  developerOpen = true;
+  home.hidden = true;
+  developerPanel.hidden = false;
+  try {
+    developerPrompt ||= await invoke<string>("dock_developer_prompt");
+  } catch (e) {
+    warn(e);
+  }
+};
+
+$("developerBack").onclick = () => {
+  developerOpen = false;
+  developerPanel.hidden = true;
+  home.hidden = false;
+};
+
+copyPrompt.onclick = async () => {
+  try {
+    developerPrompt ||= await invoke<string>("dock_developer_prompt");
+    await writeClipboard(developerPrompt);
+    copyPrompt.textContent = "已复制，发给 AI 即可";
+    copyStatus.textContent = "第一行补上你的需求；AI 会按规范生成、验证并打包。";
+    setTimeout(() => { copyPrompt.textContent = "复制完整开发指令"; }, 2600);
+  } catch (e) {
+    warn(e);
+  }
+};
 
 // 拖进来的文件由后端判断怎么处理。前端不猜类型 —— 猜错了就是两份判断逻辑。
 listen<string[]>("dock://dropped", async (e) => {

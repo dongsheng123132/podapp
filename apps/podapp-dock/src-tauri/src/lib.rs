@@ -9,9 +9,10 @@ mod host;
 mod protocol;
 
 use podapp_runtime::{Capabilities, HostProfile, PodInfo};
+use podapp_win::Rect;
 use serde_json::Value;
 use std::collections::HashMap;
-use tauri::{Emitter, Manager};
+use tauri::{Emitter, Manager, PhysicalPosition};
 #[cfg(desktop)]
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
@@ -201,24 +202,110 @@ fn pod_webview_url(id: &str) -> Result<tauri::WebviewUrl, String> {
     ))
 }
 
+fn pod_window_options(id: &str) -> (f64, f64, bool) {
+    let fallback = (860.0, 620.0, true);
+    let Ok((manifest, _)) =
+        podapp_runtime::manifest::load_dir(&podapp_runtime::apps_root().join(id))
+    else {
+        return fallback;
+    };
+    let Some(window) = manifest.ui.window.as_ref() else {
+        return fallback;
+    };
+    let width = window
+        .get("width")
+        .and_then(Value::as_f64)
+        .unwrap_or(fallback.0)
+        .clamp(360.0, 1600.0);
+    let height = window
+        .get("height")
+        .and_then(Value::as_f64)
+        .unwrap_or(fallback.1)
+        .clamp(360.0, 1200.0);
+    let resizable = window
+        .get("resizable")
+        .and_then(Value::as_bool)
+        .unwrap_or(fallback.2);
+    (width, height, resizable)
+}
+
+fn clamp_axis(value: i32, start: i32, extent: i32, size: i32) -> i32 {
+    if size >= extent {
+        start
+    } else {
+        value.clamp(start, start + extent - size)
+    }
+}
+
+/// 工具第一次打开时贴着触发它的浮舱；用户拖走后不再强行拉回，等同于“拆成独立面板”。
+fn anchored_tool_rect(anchor: Rect, work: Rect, width: i32, height: i32) -> Rect {
+    const GAP: i32 = 8;
+    let left = anchor.x - width - GAP;
+    let right = anchor.right() + GAP;
+    let left_fits = left >= work.x;
+    let right_fits = right + width <= work.right();
+    let prefer_left = anchor.x + anchor.w / 2 >= work.x + work.w / 2;
+
+    let x = match (prefer_left, left_fits, right_fits) {
+        (true, true, _) | (false, true, false) => left,
+        (false, _, true) | (true, false, true) => right,
+        _ => clamp_axis(left, work.x, work.w, width),
+    };
+    Rect {
+        x: clamp_axis(x, work.x, work.w, width),
+        y: clamp_axis(anchor.y, work.y, work.h, height),
+        w: width,
+        h: height,
+    }
+}
+
+fn hide_other_pod_windows(app: &tauri::AppHandle, keep: &str) {
+    for (label, window) in app.webview_windows() {
+        if label.starts_with("pod-") && label != keep {
+            let _ = window.hide();
+        }
+    }
+}
+
 #[tauri::command]
 async fn dock_open_pod(app: tauri::AppHandle, id: String) -> Result<(), String> {
     let info = podapp_runtime::manifest::get(&id)?;
     let label = format!("pod-{}", info.slug);
+    hide_other_pod_windows(&app, &label);
     if let Some(w) = app.get_webview_window(&label) {
+        let _ = w.show();
         let _ = w.set_focus();
+        dock::set_expanded(&app, false);
         return Ok(());
     }
-    tauri::WebviewWindowBuilder::new(
-        &app,
-        &label,
-        pod_webview_url(&id)?,
-    )
-    .title(&info.name)
-    .inner_size(1000.0, 720.0)
-    .build()
-    .map_err(|e| format!("打开失败: {e}"))?;
+    let (width, height, resizable) = pod_window_options(&id);
+    let window = tauri::WebviewWindowBuilder::new(&app, &label, pod_webview_url(&id)?)
+        .title(&info.name)
+        .inner_size(width, height)
+        .resizable(resizable)
+        .visible(false)
+        .build()
+        .map_err(|e| format!("打开失败: {e}"))?;
+
+    // 先收成最终的小船尺寸，再取锚点。反过来会按展开面板定位，收起后留下整段面板宽度的空隙。
+    dock::set_expanded(&app, false);
+    if let Ok(size) = window.outer_size() {
+        let target = anchored_tool_rect(
+            dock::target_rect(),
+            dock::current_work_area(),
+            size.width as i32,
+            size.height as i32,
+        );
+        let _ = window.set_position(PhysicalPosition::new(target.x, target.y));
+    }
+    let _ = window.show();
+    let _ = window.set_focus();
     Ok(())
+}
+
+#[tauri::command]
+fn dock_developer_prompt() -> &'static str {
+    include_str!("../../../../docs/POD-DEVELOPMENT.md")
 }
 
 #[cfg(test)]
@@ -243,6 +330,50 @@ mod pod_window_tests {
             }
             other => panic!("小程序页面不能作为外部 URL 打开: {other:?}"),
         }
+    }
+
+    #[test]
+    fn tool_window_anchors_beside_a_right_hand_dock() {
+        let work = podapp_win::Rect {
+            x: 0,
+            y: 0,
+            w: 1920,
+            h: 1040,
+        };
+        let dock = podapp_win::Rect {
+            x: 1850,
+            y: 120,
+            w: 70,
+            h: 64,
+        };
+        assert_eq!(
+            super::anchored_tool_rect(dock, work, 420, 560),
+            podapp_win::Rect {
+                x: 1422,
+                y: 120,
+                w: 420,
+                h: 560
+            }
+        );
+    }
+
+    #[test]
+    fn tool_window_stays_inside_the_work_area() {
+        let work = podapp_win::Rect {
+            x: -1280,
+            y: 0,
+            w: 1280,
+            h: 984,
+        };
+        let dock = podapp_win::Rect {
+            x: -1280,
+            y: 900,
+            w: 70,
+            h: 64,
+        };
+        let target = super::anchored_tool_rect(dock, work, 1000, 720);
+        assert!(target.x >= work.x && target.right() <= work.right());
+        assert!(target.y >= work.y && target.bottom() <= work.bottom());
     }
 }
 
@@ -279,6 +410,7 @@ pub fn run() {
             dock_uninstall,
             dock_run,
             dock_open_pod,
+            dock_developer_prompt,
             dock_artifacts,
         ])
         .setup(|app| {
@@ -366,7 +498,10 @@ pub(crate) fn rpc_with_dock_capabilities(
         if let Some(id) = args.get("id").and_then(|v| v.as_str()) {
             if podapp_runtime::manifest::owner_of(id).as_deref() == Some(pod_id) {
                 return podapp_runtime::headless::invoke(
-                    &podapp_runtime::Invocation::new(id, args.get("input").cloned().unwrap_or(Value::Null)),
+                    &podapp_runtime::Invocation::new(
+                        id,
+                        args.get("input").cloned().unwrap_or(Value::Null),
+                    ),
                     host,
                     &caps,
                     None,
@@ -374,5 +509,13 @@ pub(crate) fn rpc_with_dock_capabilities(
             }
         }
     }
-    caps.dispatch(&CapCtx { pod_id, host, execution_id: "" }, verb, args)
+    caps.dispatch(
+        &CapCtx {
+            pod_id,
+            host,
+            execution_id: "",
+        },
+        verb,
+        args,
+    )
 }

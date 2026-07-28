@@ -235,7 +235,10 @@ fn annotate_turns_boxes_into_a_task_an_agent_can_follow() {
 
         // 标注图落了盘，且返回值里没有像素
         assert!(std::path::Path::new(out["overlay"]["path"].as_str().unwrap()).exists());
-        assert!(!out.to_string().contains("iVBORw0"), "返回值里混进了 PNG base64");
+        assert!(
+            !out.to_string().contains("iVBORw0"),
+            "返回值里混进了 PNG base64"
+        );
     });
 }
 
@@ -259,6 +262,48 @@ fn annotate_refuses_an_empty_selection() {
     });
 }
 
+#[test]
+fn memo_can_be_managed_by_gui_and_agents_through_the_same_actions() {
+    if !have_node() {
+        println!("跳过：本机没有 Node");
+        return;
+    }
+    in_sandbox("memo", |_sandbox| {
+        podapp_runtime::install::install_from_path(&repo_root().join("pods/memo"), "test")
+            .unwrap_or_else(|e| panic!("装不上 memo: {e}"));
+
+        let saved: Value = podapp_runtime::headless::run_action(
+            "app.memo.note.save",
+            json!({
+                "title": "明天要做",
+                "body": "提交 PodApp 安装包",
+                "color": "green"
+            }),
+        )
+        .unwrap_or_else(|e| panic!("保存备忘失败: {e}"));
+        assert_eq!(saved["ok"], true);
+        assert_eq!(saved["note"]["color"], "green");
+        let id = saved["note"]["id"].as_str().expect("新备忘没有 id");
+
+        let listed: Value = podapp_runtime::headless::run_action(
+            "app.memo.note.list",
+            json!({ "query": "安装包" }),
+        )
+        .unwrap_or_else(|e| panic!("列出备忘失败: {e}"));
+        assert_eq!(listed["count"], 1);
+        assert_eq!(listed["notes"][0]["id"], id);
+
+        let removed: Value =
+            podapp_runtime::headless::run_action("app.memo.note.remove", json!({ "id": id }))
+                .unwrap_or_else(|e| panic!("删除备忘失败: {e}"));
+        assert_eq!(removed["removed"], true);
+
+        let empty: Value =
+            podapp_runtime::headless::run_action("app.memo.note.list", json!({})).unwrap();
+        assert_eq!(empty["count"], 0);
+    });
+}
+
 /// 跑一条 `podapp` CLI 命令，返回 stdout 第一行（CLI 约定：结果走 stdout、日志走 stderr）。
 fn podapp_cli(cwd: &std::path::Path, args: &[&str]) -> Result<String, String> {
     let cli = repo_root().join("../podapp-protocol/bin/podapp.mjs");
@@ -278,7 +323,12 @@ fn podapp_cli(cwd: &std::path::Path, args: &[&str]) -> Result<String, String> {
             String::from_utf8_lossy(&o.stderr)
         ));
     }
-    Ok(String::from_utf8_lossy(&o.stdout).lines().next().unwrap_or("").trim().to_string())
+    Ok(String::from_utf8_lossy(&o.stdout)
+        .lines()
+        .next()
+        .unwrap_or("")
+        .trim()
+        .to_string())
 }
 
 /// 文档里那个闭环，一次跑完：**脚手架 → 打包 → 安装 → 无头执行**。
@@ -304,7 +354,10 @@ fn the_whole_loop_works_scaffold_pack_install_run() {
                 return;
             }
         };
-        assert!(std::path::Path::new(&created).exists(), "脚手架目录没生成: {created}");
+        assert!(
+            std::path::Path::new(&created).exists(),
+            "脚手架目录没生成: {created}"
+        );
 
         // ② 打成 .pod
         let pod_file = podapp_cli(&work, &["pack", "loopdemo"]).expect("打包失败");
@@ -344,7 +397,7 @@ fn the_cli_and_the_runtime_agree_on_what_installs() {
         return;
     }
     in_sandbox("agree", |_sandbox| {
-        for pod in ["nine-grid", "annotate"] {
+        for pod in ["nine-grid", "annotate", "qrfix", "chatlog", "memo"] {
             let dir = repo_root().join("pods").join(pod);
             let cli_ok = podapp_cli(&repo_root(), &["validate", dir.to_str().unwrap(), "--json"]);
             let cli_ok = match cli_ok {
@@ -358,7 +411,10 @@ fn the_cli_and_the_runtime_agree_on_what_installs() {
                 }
             };
             let rt_ok = podapp_runtime::manifest::load_dir(&dir).is_ok();
-            assert_eq!(cli_ok, rt_ok, "{pod}: CLI 说 {cli_ok}，运行时说 {rt_ok} —— 两份校验开始分家了");
+            assert_eq!(
+                cli_ok, rt_ok,
+                "{pod}: CLI 说 {cli_ok}，运行时说 {rt_ok} —— 两份校验开始分家了"
+            );
         }
     });
 }

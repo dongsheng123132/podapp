@@ -1,0 +1,72 @@
+{
+  "spec_version": "0.5.0",
+  "application": { "id": "org.podapp.productivity.memo", "name": "备忘贴", "version": "0.1.0" },
+  "surfaces": [
+    { "id": "pod", "kind": "gui", "required_for_parity": true },
+    { "id": "cli", "kind": "cli", "required_for_parity": true }
+  ],
+  "actions": [
+    {
+      "id": "app.memo.note.list",
+      "title": "列出备忘",
+      "description": "List saved notes, pinned first and then newest first.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "query": { "type": "string", "maxLength": 200 }
+        }
+      },
+      "output_schema": { "type": "object" },
+      "effects": { "class": "read", "risk": "low", "reversible": true, "confirmation": "never", "audit_required": false },
+      "execution": { "headless": true, "idempotent": true, "cancellable": false, "timeout_ms": 5000 },
+      "bindings": [
+        { "surface": "pod", "target": "pod-rpc:action/app.memo.note.list" },
+        { "surface": "cli", "target": "cli:action run app.memo.note.list --json" }
+      ]
+    },
+    {
+      "id": "app.memo.note.save",
+      "title": "保存备忘",
+      "description": "Create a note or update an existing note by id.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "maxLength": 120 },
+          "title": { "type": "string", "maxLength": 120 },
+          "body": { "type": "string", "maxLength": 20000 },
+          "color": { "enum": ["yellow", "green", "blue", "rose"] },
+          "pinned": { "type": "boolean" }
+        }
+      },
+      "output_schema": { "type": "object" },
+      "effects": { "class": "write", "risk": "low", "reversible": true, "confirmation": "never", "audit_required": false },
+      "execution": { "headless": true, "idempotent": false, "cancellable": false, "timeout_ms": 5000 },
+      "bindings": [
+        { "surface": "pod", "target": "pod-rpc:action/app.memo.note.save" },
+        { "surface": "cli", "target": "cli:action run app.memo.note.save --json" }
+      ]
+    },
+    {
+      "id": "app.memo.note.remove",
+      "title": "删除备忘",
+      "description": "Delete one saved note by id.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1, "maxLength": 120 }
+        }
+      },
+      "output_schema": { "type": "object" },
+      "effects": { "class": "delete", "risk": "medium", "reversible": false, "confirmation": "if_untrusted", "audit_required": true },
+      "execution": { "headless": true, "idempotent": true, "cancellable": false, "timeout_ms": 5000 },
+      "bindings": [
+        { "surface": "pod", "target": "pod-rpc:action/app.memo.note.remove" },
+        { "surface": "cli", "target": "cli:action run app.memo.note.remove --json" }
+      ]
+    }
+  ]
+}

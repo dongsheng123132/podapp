@@ -18,15 +18,39 @@
         <button id="collapse" class="icon" title="收起">－</button>
       </header>
 
-      <div id="drop" class="drop">
-        把 AI 生成的图 / 网页 / <code>.pod</code> 小程序包拖到这里
+      <div id="home" class="home">
+        <div id="drop" class="drop">
+          把 AI 生成的图 / 网页 / <code>.pod</code> 小程序包拖到这里
+        </div>
+
+        <ul id="pods" class="pods"></ul>
+
+        <footer class="foot">
+          <button id="developer" class="developer-launch" type="button">
+            <span aria-hidden="true">＋</span>
+            <span><b>5 分钟做一个 Pod</b><small>复制规范给 AI，生成后拖入安装</small></span>
+          </button>
+          <span id="caps" class="caps"></span>
+        </footer>
       </div>
 
-      <ul id="pods" class="pods"></ul>
-
-      <footer class="foot">
-        <span id="caps" class="caps"></span>
-      </footer>
+      <section id="developerPanel" class="developer-panel" hidden>
+        <header class="developer-head">
+          <button id="developerBack" class="back" type="button" title="返回" aria-label="返回">←</button>
+          <div><b>交给 AI 制作</b><span>一份指令包含结构、规范、验证与安装步骤</span></div>
+        </header>
+        <ol class="developer-steps">
+          <li><i>1</i><span><b>复制完整指令</b><small>规范已写好，只需补一句用途</small></span></li>
+          <li><i>2</i><span><b>发给 Codex 或 Kimi</b><small>让 AI 创建可验证的 <code>.pod</code></small></span></li>
+          <li><i>3</i><span><b>拖回舟舱安装</b><small>程序舱与 AI 共用同一套动作</small></span></li>
+        </ol>
+        <div class="developer-example">
+          <span>示例需求</span>
+          <p>做一个小备忘录：能新建、自动保存、删除，AI 也可以增删查。</p>
+        </div>
+        <button id="copyDeveloperPrompt" class="copy-prompt" type="button">复制完整开发指令</button>
+        <p id="copyStatus" class="copy-status">复制后，把第一行改成你想做的小工具。</p>
+      </section>
     </section>
 
     <script type="module" src="/src/main.ts"></script>

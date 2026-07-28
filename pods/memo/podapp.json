@@ -1,0 +1,44 @@
+{
+  "profile": "podapp/pod@0.1",
+  "pod": {
+    "id": "org.podapp.productivity.memo",
+    "slug": "memo",
+    "name": "备忘贴",
+    "version": "0.1.0",
+    "summary": "随手记一笔，自动保存，AI 也能增删查",
+    "description": "一个轻量、常驻的小备忘录。人可以像桌面便签一样使用，AI 也能通过同一组动作列出、保存和删除笔记。",
+    "author": "PodApp",
+    "homepage": "https://podapp.net/pods/memo",
+    "license": "MIT",
+    "locales": ["zh-CN"],
+    "min_host_version": "0.1.0"
+  },
+  "action_parity": "./action-parity.json",
+  "package": {
+    "kind": "web",
+    "web": { "root": "web", "entry": "index.html", "actions": "actions.mjs" }
+  },
+  "ui": {
+    "icon": "lucide:sticky-note",
+    "accent": "#e2c35b",
+    "container": "window",
+    "window": { "width": 420, "height": 560, "resizable": true },
+    "home_dock": true,
+    "quick_actions": [
+      { "action": "app.memo.note.save", "label": "新建备忘", "icon": "lucide:plus" }
+    ]
+  },
+  "permissions": {
+    "ai": {
+      "image_generate": false,
+      "image_edit": false,
+      "chat": false,
+      "video_generate": false,
+      "max_calls_per_run": 0
+    },
+    "fs": { "app_data": true, "save_dialog": false, "open_dialog": false },
+    "net": { "allow": [] },
+    "host_actions": []
+  },
+  "market": { "category": "productivity", "tags": ["备忘录", "便签", "笔记", "效率"] }
+}

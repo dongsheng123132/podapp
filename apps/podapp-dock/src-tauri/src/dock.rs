@@ -28,7 +28,9 @@ fn with_state<T>(f: impl FnOnce(&mut DockState) -> T) -> T {
 /// 坐标一律 `Physical*`：[`podapp_win`] 给的就是物理像素（DWM + per-monitor DPI），
 /// 用 `Logical*` 会在非 100% 缩放的屏幕上系统性偏移，而偏移量恰好像「差了个边框」。
 pub fn reposition(app: &AppHandle) {
-    let Some(win) = app.get_webview_window(DOCK_LABEL) else { return };
+    let Some(win) = app.get_webview_window(DOCK_LABEL) else {
+        return;
+    };
     let (host_rect, expanded) = with_state(|s| (s.host.as_ref().map(|h| h.rect), s.expanded));
 
     let work = podapp_win::work_area(with_state(|s| s.host.as_ref().map(|h| h.hwnd)));
@@ -70,6 +72,30 @@ pub fn is_expanded() -> bool {
 /// 当前贴着谁。给前端显示「已吸附到 Codex」用。
 pub fn host_summary() -> Option<(String, Rect)> {
     with_state(|s| s.host.as_ref().map(|h| (h.title.clone(), h.rect)))
+}
+
+/// 当前浮舱所在显示器的可用区域。Pod 窗口也用同一个坐标系，避免跨屏和 DPI 混算。
+pub fn current_work_area() -> Rect {
+    podapp_win::work_area(with_state(|s| s.host.as_ref().map(|h| h.hwnd)))
+}
+
+/// 当前状态最终应该落到的矩形。窗口变形是异步的，紧接着读 `outer_position`
+/// 可能仍拿到旧值；需要同步锚定其他窗口时，直接认这份纯几何结果。
+pub fn target_rect() -> Rect {
+    let (host_rect, host_hwnd, expanded) = with_state(|s| {
+        (
+            s.host.as_ref().map(|h| h.rect),
+            s.host.as_ref().map(|h| h.hwnd),
+            s.expanded,
+        )
+    });
+    place(
+        host_rect,
+        podapp_win::work_area(host_hwnd),
+        expanded,
+        Metrics::platform(),
+    )
+    .rect
 }
 
 /// 开始跟随宿主。返回的 watcher 要一直活着 —— drop 了就停了。

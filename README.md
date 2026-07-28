@@ -36,8 +36,14 @@ cargo run -p podapp-win --example probe -- --verify # 浮舱**实际**落点 == 
 crates/podapp-runtime/     运行时：清单 / 安装 / 动作分发 / 资源服务 / 权限 / 无头执行
 crates/podapp-win/         找宿主窗口 + 跟随 + 停靠几何（Windows）
 apps/podapp-dock/          浮舱壳：Tauri 2，吸附 / 热键 / 拖入即装 / podapp:// 协议
-pods/                      4 个官方 AI 小程序源码，随桌面壳首次启动自动安装
+pods/                      5 个官方 AI 小程序源码，随桌面壳首次启动自动安装
 ```
+
+## 5 分钟做一个 Pod
+
+浮舱底部有“5 分钟做一个 Pod”入口，可以把完整开发指令直接复制给 Codex 或 Kimi。
+规范、最小清单、验证和打包命令见 [`docs/POD-DEVELOPMENT.md`](./docs/POD-DEVELOPMENT.md)；
+[`pods/memo`](./pods/memo) 是一份可运行的备忘贴参考实现。
 
 ## 它是开放的吗
 

@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>备忘贴</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #151716;
+        --bar: #1a1d1b;
+        --side: #181b19;
+        --surface: #202421;
+        --line: #303531;
+        --line-strong: #4a514b;
+        --text: #eff2ef;
+        --muted: #929a94;
+        --yellow: #e2c35b;
+        --green: #72bd8a;
+        --blue: #6daed0;
+        --rose: #d78691;
+        --bad: #ff8585;
+      }
+      * { box-sizing: border-box; }
+      [hidden] { display: none !important; }
+      button, input, textarea { font: inherit; letter-spacing: 0; }
+      body {
+        margin: 0;
+        height: 100vh;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--text);
+        font: 13px/1.5 "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
+      }
+      .appbar {
+        height: 50px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 0 12px;
+        border-bottom: 1px solid var(--line);
+        background: var(--bar);
+      }
+      .mark {
+        width: 26px;
+        height: 26px;
+        position: relative;
+        border: 1px solid #786a35;
+        border-radius: 6px;
+        background: #393521;
+      }
+      .mark::before, .mark::after {
+        content: "";
+        position: absolute;
+        left: 6px;
+        right: 6px;
+        height: 1px;
+        background: var(--yellow);
+      }
+      .mark::before { top: 9px; }
+      .mark::after { top: 14px; right: 10px; }
+      .title { min-width: 0; }
+      .title b, .title span { display: block; }
+      .title b { font-size: 13px; }
+      .title span { color: var(--muted); font-size: 10px; white-space: nowrap; }
+      .spacer { flex: 1; }
+      .icon {
+        width: 30px;
+        height: 30px;
+        padding: 0;
+        display: grid;
+        place-items: center;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--surface);
+        color: var(--text);
+        cursor: pointer;
+        font-size: 17px;
+      }
+      .icon:hover { border-color: var(--line-strong); }
+      .icon.danger.confirm { border-color: #854d52; background: #432a2c; color: #ffc3c3; font-size: 11px; }
+      .workspace {
+        height: calc(100vh - 50px);
+        min-width: 0;
+        display: grid;
+        grid-template-columns: 132px minmax(0, 1fr);
+      }
+      .sidebar {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        border-right: 1px solid var(--line);
+        background: var(--side);
+      }
+      .search {
+        width: calc(100% - 14px);
+        height: 30px;
+        margin: 8px 7px;
+        padding: 0 8px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        outline: 0;
+        background: #131513;
+        color: var(--text);
+        font-size: 11px;
+      }
+      .search:focus { border-color: #6e6339; }
+      .notes { min-height: 0; flex: 1; margin: 0; padding: 0 6px 8px; overflow-y: auto; list-style: none; }
+      .note-item {
+        width: 100%;
+        min-height: 58px;
+        margin-bottom: 3px;
+        padding: 7px 8px;
+        border: 0;
+        border-left: 2px solid transparent;
+        border-radius: 4px;
+        background: transparent;
+        color: var(--text);
+        text-align: left;
+        cursor: pointer;
+      }
+      .note-item:hover { background: #202421; }
+      .note-item.on { border-left-color: var(--note-color); background: #242825; }
+      .note-item b, .note-item span, .note-item small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .note-item b { font-size: 11px; font-weight: 600; }
+      .note-item span { margin-top: 3px; color: var(--muted); font-size: 9px; }
+      .note-item small { margin-top: 4px; color: #69706b; font-size: 8px; }
+      .empty-list { padding: 18px 8px; color: var(--muted); font-size: 10px; text-align: center; }
+      .editor { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) 42px; background: #171917; }
+      .note-title {
+        width: 100%;
+        height: 52px;
+        padding: 15px 14px 8px;
+        border: 0;
+        border-bottom: 1px solid var(--line);
+        outline: 0;
+        background: transparent;
+        color: var(--text);
+        font-size: 17px;
+        font-weight: 650;
+      }
+      .note-title::placeholder, .note-body::placeholder { color: #656c67; }
+      .note-body {
+        width: 100%;
+        min-height: 0;
+        padding: 12px 14px;
+        resize: none;
+        border: 0;
+        outline: 0;
+        background: transparent;
+        color: #d9ddda;
+        line-height: 1.7;
+      }
+      .editor-foot {
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 0 11px;
+        border-top: 1px solid var(--line);
+      }
+      .swatch {
+        width: 16px;
+        height: 16px;
+        padding: 0;
+        border: 2px solid transparent;
+        border-radius: 50%;
+        background: var(--swatch);
+        cursor: pointer;
+      }
+      .swatch.on { border-color: #fff; box-shadow: 0 0 0 1px #161816; }
+      .status {
+        min-width: 0;
+        margin-left: auto;
+        color: var(--muted);
+        font-size: 9px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .status.bad { color: var(--bad); }
+      .accent-yellow { --note-color: var(--yellow); }
+      .accent-green { --note-color: var(--green); }
+      .accent-blue { --note-color: var(--blue); }
+      .accent-rose { --note-color: var(--rose); }
+      @media (max-width: 360px) {
+        .workspace { grid-template-columns: 104px minmax(0, 1fr); }
+        .title span { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="appbar">
+      <span class="mark" aria-hidden="true"></span>
+      <span class="title"><b>备忘贴</b><span>自动保存 · AI 可读写</span></span>
+      <span class="spacer"></span>
+      <button id="remove" class="icon danger" type="button" title="删除当前备忘" aria-label="删除当前备忘">⌫</button>
+      <button id="create" class="icon" type="button" title="新建备忘" aria-label="新建备忘">＋</button>
+    </header>
+
+    <main class="workspace">
+      <aside class="sidebar">
+        <input id="search" class="search" type="search" placeholder="搜索" aria-label="搜索备忘" />
+        <ul id="notes" class="notes"></ul>
+      </aside>
+      <section class="editor">
+        <input id="noteTitle" class="note-title" maxlength="120" placeholder="无标题" aria-label="备忘标题" />
+        <textarea id="noteBody" class="note-body" maxlength="20000" placeholder="记点什么…"></textarea>
+        <footer class="editor-foot">
+          <button class="swatch on" data-color="yellow" style="--swatch:var(--yellow)" type="button" title="黄色"></button>
+          <button class="swatch" data-color="green" style="--swatch:var(--green)" type="button" title="绿色"></button>
+          <button class="swatch" data-color="blue" style="--swatch:var(--blue)" type="button" title="蓝色"></button>
+          <button class="swatch" data-color="rose" style="--swatch:var(--rose)" type="button" title="玫红"></button>
+          <span id="status" class="status">新备忘</span>
+        </footer>
+      </section>
+    </main>
+
+    <script type="module">
+      const $ = (id) => document.getElementById(id);
+      const state = { notes: [], current: null, color: "yellow", timer: 0, saving: null, deleteArmed: false };
+
+      function setStatus(text, bad = false) {
+        $("status").textContent = text;
+        $("status").classList.toggle("bad", bad);
+      }
+
+      function excerpt(note) {
+        return note.body.trim().replace(/\s+/g, " ").slice(0, 46) || "空白备忘";
+      }
+
+      function dateLabel(value) {
+        if (!value) return "";
+        const date = new Date(value);
+        const today = new Date();
+        return date.toDateString() === today.toDateString()
+          ? date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
+          : date.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
+      }
+
+      function renderList() {
+        const query = $("search").value.trim().toLocaleLowerCase();
+        const visible = state.notes.filter((note) =>
+          !query || `${note.title}\n${note.body}`.toLocaleLowerCase().includes(query),
+        );
+        $("notes").replaceChildren(...visible.map((note) => {
+          const li = document.createElement("li");
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = `note-item accent-${note.color}${note.id === state.current?.id ? " on" : ""}`;
+          const title = document.createElement("b");
+          title.textContent = note.title.trim() || "无标题";
+          const body = document.createElement("span");
+          body.textContent = excerpt(note);
+          const time = document.createElement("small");
+          time.textContent = dateLabel(note.updated_at);
+          button.append(title, body, time);
+          button.onclick = async () => {
+            await saveNow();
+            select(note);
+          };
+          li.append(button);
+          return li;
+        }));
+        if (!visible.length) {
+          const empty = document.createElement("li");
+          empty.className = "empty-list";
+          empty.textContent = query ? "没有匹配的备忘" : "还没有备忘";
+          $("notes").append(empty);
+        }
+      }
+
+      function select(note) {
+        state.current = note ? { ...note } : null;
+        state.color = note?.color ?? "yellow";
+        $("noteTitle").value = note?.title ?? "";
+        $("noteBody").value = note?.body ?? "";
+        document.querySelectorAll(".swatch").forEach((button) =>
+          button.classList.toggle("on", button.dataset.color === state.color),
+        );
+        disarmDelete();
+        setStatus(note ? "已保存" : "新备忘");
+        renderList();
+        $("noteBody").focus();
+      }
+
+      function disarmDelete() {
+        state.deleteArmed = false;
+        $("remove").classList.remove("confirm");
+        $("remove").textContent = "⌫";
+      }
+
+      function dirty() {
+        clearTimeout(state.timer);
+        setStatus("正在输入…");
+        state.timer = setTimeout(saveNow, 520);
+      }
+
+      async function saveNow() {
+        clearTimeout(state.timer);
+        if (state.saving) return state.saving;
+        const title = $("noteTitle").value;
+        const body = $("noteBody").value;
+        if (!state.current?.id && !title.trim() && !body.trim()) return;
+        state.saving = (async () => {
+          setStatus("保存中…");
+          try {
+            const result = await pod.action("app.memo.note.save", {
+              id: state.current?.id,
+              title,
+              body,
+              color: state.color,
+            });
+            state.current = result.note;
+            const index = state.notes.findIndex((note) => note.id === result.note.id);
+            if (index >= 0) state.notes[index] = result.note;
+            else state.notes.unshift(result.note);
+            state.notes.sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+            setStatus("已保存");
+            renderList();
+          } catch (error) {
+            setStatus(String(error.message || error), true);
+          }
+        })();
+        try {
+          await state.saving;
+        } finally {
+          state.saving = null;
+        }
+      }
+
+      async function loadNotes(keepSelection = false) {
+        try {
+          const result = await pod.action("app.memo.note.list", {});
+          state.notes = result.notes;
+          const selected = keepSelection
+            ? state.notes.find((note) => note.id === state.current?.id)
+            : state.notes[0];
+          select(selected ?? null);
+        } catch (error) {
+          setStatus(String(error.message || error), true);
+        }
+      }
+
+      $("create").onclick = async () => {
+        await saveNow();
+        select(null);
+      };
+      $("remove").onclick = async () => {
+        if (!state.current?.id) {
+          select(null);
+          return;
+        }
+        if (!state.deleteArmed) {
+          state.deleteArmed = true;
+          $("remove").classList.add("confirm");
+          $("remove").textContent = "确认";
+          setTimeout(disarmDelete, 3000);
+          return;
+        }
+        try {
+          await pod.action("app.memo.note.remove", { id: state.current.id });
+          state.notes = state.notes.filter((note) => note.id !== state.current.id);
+          select(state.notes[0] ?? null);
+          setStatus("已删除");
+        } catch (error) {
+          setStatus(String(error.message || error), true);
+        }
+      };
+      $("search").oninput = renderList;
+      $("noteTitle").oninput = dirty;
+      $("noteBody").oninput = dirty;
+      document.querySelectorAll(".swatch").forEach((button) => {
+        button.onclick = () => {
+          state.color = button.dataset.color;
+          document.querySelectorAll(".swatch").forEach((item) => item.classList.toggle("on", item === button));
+          dirty();
+          renderList();
+        };
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.ctrlKey && event.key.toLocaleLowerCase() === "n") {
+          event.preventDefault();
+          $("create").click();
+        }
+        if (event.ctrlKey && event.key.toLocaleLowerCase() === "s") {
+          event.preventDefault();
+          saveNow();
+        }
+      });
+      window.addEventListener("focus", () => {
+        if (!state.saving && !$("noteTitle").matches(":focus") && !$("noteBody").matches(":focus")) {
+          loadNotes(true);
+        }
+      });
+
+      loadNotes();
+    </script>
+  </body>
+</html>
