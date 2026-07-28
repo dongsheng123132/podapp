@@ -4,7 +4,7 @@
     "id": "org.podapp.image.annotate",
     "slug": "annotate",
     "name": "图片标注",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "summary": "在 AI 生成的图上框一下，写清楚要改哪里",
     "description": "你说「把上面那个标题放大」，AI 得猜是哪一个。这个程序舱让你直接在图上框出区域、写下要求，输出一份带坐标的结构化任务 + 一张画了框和编号的标注图。把这两样丢回 Codex，它不用再猜。",
     "author": "PodApp",
@@ -24,7 +24,7 @@
   },
   "ui": {
     "icon": "lucide:square-dashed-mouse-pointer",
-    "accent": "#f59e0b",
+    "accent": "#f0a04b",
     "container": "window",
     "window": { "width": 1000, "height": 720, "resizable": true },
     "home_dock": true,

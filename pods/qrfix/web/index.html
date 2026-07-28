@@ -2,146 +2,988 @@
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
-    <title>替换二维码</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>AI 海报二维码</title>
     <style>
-      :root { --bg:#14161a; --fg:#e6e8ec; --dim:#8b93a1; --line:#262a31; --ok:#10b981; --bad:#fca5a5; }
-      * { box-sizing:border-box; }
-      body { margin:0; background:var(--bg); color:var(--fg);
-             font:14px/1.6 "Microsoft YaHei UI", system-ui, sans-serif;
-             display:flex; flex-direction:column; height:100vh; }
-      header { padding:12px 18px; border-bottom:1px solid var(--line); font-weight:600; }
-      main { flex:1; display:flex; min-height:0; }
-      #stage { flex:1; display:grid; place-items:center; padding:16px; min-width:0; overflow:auto; }
-      #drop { border:1px dashed var(--line); border-radius:12px; padding:48px 32px;
-              text-align:center; color:var(--dim); }
-      #wrap { position:relative; line-height:0; cursor:crosshair; }
-      #pic { display:block; max-width:100%; max-height:70vh; border-radius:6px; }
-      svg { position:absolute; inset:0; width:100%; height:100%; }
-      aside { width:300px; border-left:1px solid var(--line); padding:14px;
-              display:flex; flex-direction:column; gap:10px; overflow-y:auto; }
-      label { font-size:12px; color:var(--dim); }
-      input[type=text] { width:100%; background:#0f1115; color:var(--fg);
-                         border:1px solid var(--line); border-radius:6px; padding:7px; font:inherit; }
-      button { background:var(--ok); color:#08130e; border:0; border-radius:8px;
-               padding:10px; font-size:14px; font-weight:600; cursor:pointer; }
-      button:disabled { background:#3a3f4a; color:var(--dim); cursor:not-allowed; }
-      .hint { font-size:12px; color:var(--dim); }
-      .bad { color:var(--bad); }
-      .good { color:var(--ok); }
+      :root {
+        color-scheme: dark;
+        --bg: #151716;
+        --panel: #1b1e1c;
+        --surface: #222624;
+        --surface-2: #292d2a;
+        --line: #363b37;
+        --line-strong: #4b524d;
+        --text: #f2f4f1;
+        --muted: #a1a8a3;
+        --faint: #737a75;
+        --accent: #39c77c;
+        --accent-ink: #07150d;
+        --good: #62d895;
+        --warn: #f2b84b;
+        --bad: #ff7979;
+      }
+      * { box-sizing: border-box; }
+      [hidden] { display: none !important; }
+      button, input, textarea { font: inherit; }
+      button { letter-spacing: 0; }
+      body {
+        margin: 0;
+        height: 100vh;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--text);
+        font: 14px/1.5 "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
+      }
+      .appbar {
+        height: 56px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 18px;
+        border-bottom: 1px solid var(--line);
+        background: #181b19;
+      }
+      .mark {
+        width: 30px;
+        height: 30px;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 2px;
+        padding: 5px;
+        border: 1px solid #367e58;
+        border-radius: 7px;
+        background: #173224;
+      }
+      .mark i { background: var(--accent); border-radius: 1px; }
+      .mark i:nth-child(2), .mark i:nth-child(4), .mark i:nth-child(8) { opacity: .2; }
+      .title { min-width: 0; }
+      .title strong { display: block; font-size: 15px; font-weight: 650; }
+      .title span { display: block; color: var(--muted); font-size: 11px; }
+      .appbar-spacer { flex: 1; }
+      .verified-pill {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .verified-pill::before {
+        content: "";
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--faint);
+      }
+      .verified-pill.ready { color: var(--good); }
+      .verified-pill.ready::before { background: var(--good); box-shadow: 0 0 0 3px #21432f; }
+      .workspace {
+        height: calc(100vh - 56px);
+        display: grid;
+        grid-template-columns: 340px minmax(0, 1fr);
+      }
+      .inspector {
+        min-height: 0;
+        overflow-y: auto;
+        border-right: 1px solid var(--line);
+        background: var(--panel);
+      }
+      .step {
+        padding: 16px;
+        border-bottom: 1px solid var(--line);
+      }
+      .step-head {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        margin-bottom: 11px;
+      }
+      .step-no {
+        width: 22px;
+        height: 22px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        background: var(--surface-2);
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .step.complete .step-no { background: var(--accent); color: var(--accent-ink); }
+      .step-title { font-size: 13px; font-weight: 650; }
+      .step-summary { margin-left: auto; color: var(--faint); font-size: 11px; }
+      .drop-row {
+        min-height: 72px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px;
+        border: 1px dashed var(--line-strong);
+        border-radius: 7px;
+        background: #191c1a;
+        cursor: pointer;
+      }
+      .drop-row:hover, .drop-row.over { border-color: var(--accent); background: #19231d; }
+      .thumb {
+        width: 52px;
+        height: 52px;
+        flex: 0 0 auto;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background:
+          linear-gradient(45deg, #252925 25%, transparent 25%),
+          linear-gradient(-45deg, #252925 25%, transparent 25%),
+          linear-gradient(45deg, transparent 75%, #252925 75%),
+          linear-gradient(-45deg, transparent 75%, #252925 75%);
+        background-position: 0 0, 0 6px, 6px -6px, -6px 0;
+        background-size: 12px 12px;
+        color: var(--faint);
+        font-size: 20px;
+      }
+      .thumb img { width: 100%; height: 100%; object-fit: cover; }
+      .drop-copy { min-width: 0; }
+      .drop-copy b { display: block; font-size: 12px; font-weight: 600; }
+      .drop-copy span {
+        display: block;
+        margin-top: 2px;
+        color: var(--muted);
+        font-size: 11px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .source-tabs, .format-tabs {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        padding: 3px;
+        margin-bottom: 10px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: #151816;
+      }
+      .tab {
+        min-height: 30px;
+        border: 0;
+        border-radius: 5px;
+        background: transparent;
+        color: var(--muted);
+        cursor: pointer;
+        font-size: 12px;
+      }
+      .tab.on { background: var(--surface-2); color: var(--text); }
+      .field-label {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 6px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .text-input {
+        width: 100%;
+        height: 38px;
+        padding: 0 10px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        outline: 0;
+        background: #141715;
+        color: var(--text);
+      }
+      .text-input:focus { border-color: #3f9d68; box-shadow: 0 0 0 2px #1b3828; }
+      .qr-source {
+        display: grid;
+        grid-template-columns: 68px minmax(0, 1fr);
+        gap: 10px;
+        align-items: center;
+      }
+      .qr-preview {
+        width: 68px;
+        height: 68px;
+        display: grid;
+        place-items: center;
+        padding: 5px;
+        border-radius: 6px;
+        background: #fff;
+        color: #606560;
+        font-size: 10px;
+        text-align: center;
+      }
+      .qr-preview img { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+      .mini-copy { color: var(--muted); font-size: 11px; }
+      .mini-copy b { display: block; margin-bottom: 3px; color: var(--text); font-size: 12px; }
+      .control-row {
+        display: grid;
+        grid-template-columns: 1fr 66px;
+        gap: 9px;
+        align-items: center;
+      }
+      input[type="range"] { width: 100%; accent-color: var(--accent); }
+      .number {
+        height: 32px;
+        padding: 0 7px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #141715;
+        color: var(--text);
+        text-align: right;
+      }
+      .adjust-row {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        margin-top: 10px;
+      }
+      .icon-btn {
+        width: 32px;
+        height: 32px;
+        display: grid;
+        place-items: center;
+        padding: 0;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--surface);
+        color: var(--text);
+        cursor: pointer;
+      }
+      .icon-btn:hover { border-color: var(--line-strong); background: var(--surface-2); }
+      .icon-btn:disabled { opacity: .35; cursor: default; }
+      .reset-btn {
+        min-width: 58px;
+        height: 32px;
+        margin-left: auto;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: transparent;
+        color: var(--muted);
+        cursor: pointer;
+        font-size: 11px;
+      }
+      .export-zone { padding: 16px; }
+      .primary {
+        width: 100%;
+        height: 42px;
+        border: 0;
+        border-radius: 7px;
+        background: var(--accent);
+        color: var(--accent-ink);
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .primary:hover { background: #4bd38a; }
+      .primary:disabled { background: #3c423e; color: #818782; cursor: default; }
+      .status {
+        min-height: 34px;
+        padding-top: 9px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .status.good { color: var(--good); }
+      .status.bad { color: var(--bad); }
+      .result {
+        display: grid;
+        grid-template-columns: 54px 1fr;
+        gap: 10px;
+        align-items: center;
+        margin-top: 8px;
+        padding-top: 12px;
+        border-top: 1px solid var(--line);
+      }
+      .result img {
+        width: 54px;
+        height: 54px;
+        object-fit: cover;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+      }
+      .result b { display: block; color: var(--good); font-size: 12px; }
+      .result span { color: var(--muted); font-size: 11px; }
+      .canvas-area {
+        min-width: 0;
+        min-height: 0;
+        display: grid;
+        grid-template-rows: 44px minmax(0, 1fr);
+        background: #101211;
+      }
+      .canvas-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 16px;
+        border-bottom: 1px solid #292d2a;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .canvas-toolbar strong { color: var(--text); font-weight: 600; }
+      .canvas {
+        min-height: 0;
+        display: grid;
+        place-items: center;
+        overflow: auto;
+        padding: 26px;
+        background-color: #111311;
+        background-image:
+          linear-gradient(#1d201e 1px, transparent 1px),
+          linear-gradient(90deg, #1d201e 1px, transparent 1px);
+        background-size: 22px 22px;
+      }
+      .empty {
+        width: min(470px, 82%);
+        padding: 38px 22px;
+        border: 1px dashed #414742;
+        border-radius: 8px;
+        background: #161917;
+        text-align: center;
+        cursor: pointer;
+      }
+      .empty-visual {
+        width: 124px;
+        height: 88px;
+        position: relative;
+        margin: 0 auto 18px;
+        border: 1px solid #3c423e;
+        border-radius: 6px;
+        background:
+          linear-gradient(145deg, transparent 49%, #2b312d 50%, transparent 51%),
+          #202421;
+      }
+      .empty-visual::after {
+        content: "";
+        position: absolute;
+        right: 10px;
+        bottom: 10px;
+        width: 28px;
+        height: 28px;
+        border: 5px solid #fff;
+        background:
+          linear-gradient(90deg, #111 33%, transparent 33% 66%, #111 66%),
+          linear-gradient(#111 33%, transparent 33% 66%, #111 66%),
+          #fff;
+        box-shadow: 0 0 0 2px var(--accent);
+      }
+      .empty b { display: block; font-size: 14px; }
+      .empty span { display: block; margin-top: 6px; color: var(--muted); font-size: 12px; }
+      .poster {
+        position: relative;
+        line-height: 0;
+        box-shadow: 0 18px 50px rgba(0, 0, 0, .45);
+        user-select: none;
+      }
+      .poster > img {
+        display: block;
+        max-width: min(100%, 900px);
+        max-height: calc(100vh - 155px);
+        border-radius: 3px;
+      }
+      .qr-layer {
+        position: absolute;
+        padding: 0;
+        border: 2px solid var(--accent);
+        background: #fff;
+        cursor: move;
+        touch-action: none;
+        box-shadow: 0 0 0 1px #0b1710, 0 6px 18px rgba(0, 0, 0, .28);
+      }
+      .qr-layer img {
+        width: 100%;
+        height: 100%;
+        display: block;
+        object-fit: fill;
+        image-rendering: pixelated;
+        pointer-events: none;
+      }
+      .resize-handle {
+        position: absolute;
+        right: -7px;
+        bottom: -7px;
+        width: 14px;
+        height: 14px;
+        border: 2px solid #102016;
+        border-radius: 3px;
+        background: var(--accent);
+        cursor: nwse-resize;
+      }
+      dialog {
+        width: min(680px, calc(100vw - 40px));
+        max-height: calc(100vh - 40px);
+        padding: 0;
+        border: 1px solid var(--line-strong);
+        border-radius: 8px;
+        background: #1b1e1c;
+        color: var(--text);
+        box-shadow: 0 30px 90px rgba(0, 0, 0, .65);
+      }
+      dialog::backdrop { background: rgba(4, 6, 5, .78); }
+      .dialog-head, .dialog-foot {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--line);
+      }
+      .dialog-head b { font-size: 13px; }
+      .dialog-head span { margin-left: auto; color: var(--muted); font-size: 11px; }
+      .crop-body {
+        display: grid;
+        place-items: center;
+        min-height: 300px;
+        padding: 18px;
+        overflow: auto;
+        background: #101211;
+      }
+      #cropStage { position: relative; line-height: 0; }
+      #cropImg { display: block; max-width: 590px; max-height: 430px; }
+      #cropBox {
+        position: absolute;
+        border: 2px solid var(--accent);
+        background: rgba(57, 199, 124, .08);
+        box-shadow: 0 0 0 9999px rgba(0, 0, 0, .55);
+        cursor: move;
+        touch-action: none;
+      }
+      #cropBox::before, #cropBox::after {
+        content: "";
+        position: absolute;
+        background: rgba(255, 255, 255, .6);
+      }
+      #cropBox::before { left: 33%; right: 33%; top: 0; bottom: 0; border-left: 1px solid; border-right: 1px solid; background: none; }
+      #cropBox::after { top: 33%; bottom: 33%; left: 0; right: 0; border-top: 1px solid; border-bottom: 1px solid; background: none; }
+      .dialog-foot { border-top: 1px solid var(--line); border-bottom: 0; }
+      .dialog-foot label { color: var(--muted); font-size: 11px; }
+      .dialog-foot input { width: 160px; }
+      .dialog-foot .spacer { flex: 1; }
+      .secondary {
+        height: 34px;
+        padding: 0 13px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--surface);
+        color: var(--text);
+        cursor: pointer;
+      }
+      .secondary.strong { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+      @media (max-width: 760px) {
+        body { overflow: auto; }
+        .workspace { height: auto; min-height: calc(100vh - 56px); grid-template-columns: 1fr; }
+        .inspector { border-right: 0; border-bottom: 1px solid var(--line); }
+        .canvas-area { min-height: 560px; }
+      }
     </style>
   </head>
   <body>
-    <header>替换二维码 —— 用真码盖掉 AI 画的那个</header>
-    <main>
-      <section id="stage">
-        <div id="drop">把海报拖进来，或 Ctrl+V 粘贴</div>
-        <div id="wrap" hidden><img id="pic" alt="海报" /><svg id="ov"></svg></div>
-      </section>
-      <aside>
-        <div>
-          <label for="txt">二维码内容（网址或文本）</label>
-          <input id="txt" type="text" placeholder="https://..." />
-          <div class="hint">按目标尺寸直接生成，不缩放 —— 缩放会糊掉模块，扫不出来。</div>
-        </div>
-        <div class="hint" id="tip">在海报上按住拖一个方框，框出码该贴的位置。</div>
-        <button id="go" disabled>贴上去并验证</button>
-        <div id="msg" class="hint"></div>
+    <header class="appbar">
+      <span class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+      <div class="title">
+        <strong>AI 海报二维码</strong>
+        <span>用可扫描真码替换 AI 生成的假码</span>
+      </div>
+      <div class="appbar-spacer"></div>
+      <div id="verifiedPill" class="verified-pill">导出前自动扫码校验</div>
+    </header>
+
+    <main class="workspace">
+      <aside class="inspector">
+        <section id="posterStep" class="step">
+          <div class="step-head">
+            <span class="step-no">1</span>
+            <span class="step-title">海报底图</span>
+            <span id="posterSummary" class="step-summary">未选择</span>
+          </div>
+          <div id="posterDrop" class="drop-row" role="button" tabindex="0">
+            <div class="thumb"><img id="posterThumb" hidden alt="" /><span id="posterGlyph">＋</span></div>
+            <div class="drop-copy">
+              <b>选择或拖入海报</b>
+              <span id="posterName">也可以直接粘贴 AI 生成的图片</span>
+            </div>
+          </div>
+          <input id="posterFile" type="file" accept="image/*" hidden />
+        </section>
+
+        <section id="qrStep" class="step">
+          <div class="step-head">
+            <span class="step-no">2</span>
+            <span class="step-title">真二维码</span>
+            <span id="qrSummary" class="step-summary">未准备</span>
+          </div>
+          <div class="source-tabs" role="tablist">
+            <button id="textTab" class="tab on" type="button">网址 / 文字</button>
+            <button id="uploadTab" class="tab" type="button">上传码截图</button>
+          </div>
+          <div id="textPanel">
+            <div class="field-label"><span>扫码后打开的内容</span><span id="textCount">0 / 2000</span></div>
+            <input id="qrText" class="text-input" type="text" maxlength="2000" placeholder="https://example.com" />
+            <div class="qr-source" style="margin-top:10px">
+              <div id="textPreview" class="qr-preview">等待内容</div>
+              <div class="mini-copy">
+                <b>系统生成标准真码</b>
+                高纠错等级，按最终尺寸重新生成，不做模糊缩放。
+              </div>
+            </div>
+          </div>
+          <div id="uploadPanel" hidden>
+            <div id="qrDrop" class="drop-row" role="button" tabindex="0">
+              <div class="qr-preview"><img id="uploadPreview" hidden alt="" /><span id="uploadGlyph">＋</span></div>
+              <div class="drop-copy">
+                <b>上传二维码截图</b>
+                <span id="uploadName">微信、支付宝等平台码请用截图</span>
+              </div>
+            </div>
+            <input id="qrFile" type="file" accept="image/*" hidden />
+          </div>
+        </section>
+
+        <section id="adjustStep" class="step">
+          <div class="step-head">
+            <span class="step-no">3</span>
+            <span class="step-title">位置与大小</span>
+            <span id="placeSummary" class="step-summary">等待素材</span>
+          </div>
+          <div class="field-label"><span>二维码边长</span><span>原图像素</span></div>
+          <div class="control-row">
+            <input id="sizeRange" type="range" min="21" max="500" value="120" disabled />
+            <input id="sizeNumber" class="number" type="number" min="21" value="120" disabled />
+          </div>
+          <div class="adjust-row">
+            <button class="icon-btn nudge" data-dx="-1" data-dy="0" type="button" title="向左微调" disabled>←</button>
+            <button class="icon-btn nudge" data-dx="0" data-dy="-1" type="button" title="向上微调" disabled>↑</button>
+            <button class="icon-btn nudge" data-dx="0" data-dy="1" type="button" title="向下微调" disabled>↓</button>
+            <button class="icon-btn nudge" data-dx="1" data-dy="0" type="button" title="向右微调" disabled>→</button>
+            <button id="resetPlace" class="reset-btn" type="button" disabled>重置位置</button>
+          </div>
+        </section>
+
+        <section class="export-zone">
+          <button id="exportBtn" class="primary" type="button" disabled>合成、扫码并导出</button>
+          <div id="status" class="status">准备海报和真二维码后即可合成。</div>
+          <div id="result" class="result" hidden>
+            <img id="resultImg" alt="已导出的海报" />
+            <div><b>已验证可扫描</b><span id="resultCopy"></span></div>
+          </div>
+        </section>
       </aside>
+
+      <section class="canvas-area">
+        <div class="canvas-toolbar">
+          <strong>合成预览</strong>
+          <span id="canvasMeta">拖入海报开始</span>
+          <span style="margin-left:auto">拖动二维码调整位置，右下角调整大小</span>
+        </div>
+        <div id="canvas" class="canvas">
+          <div id="empty" class="empty" role="button" tabindex="0">
+            <div class="empty-visual" aria-hidden="true"></div>
+            <b>放入 AI 生成的海报</b>
+            <span>支持拖放、选择文件或 Ctrl+V 粘贴</span>
+          </div>
+          <div id="poster" class="poster" hidden>
+            <img id="posterImg" alt="海报预览" />
+            <div id="qrLayer" class="qr-layer" hidden>
+              <img id="layerImg" alt="二维码预览" />
+              <span id="resizeHandle" class="resize-handle" title="拖动调整二维码大小"></span>
+            </div>
+          </div>
+        </div>
+      </section>
     </main>
+
+    <dialog id="cropDialog">
+      <div class="dialog-head">
+        <b>裁出真正的二维码</b>
+        <span>保留二维码四周白边，扫码会更稳定</span>
+      </div>
+      <div class="crop-body">
+        <div id="cropStage"><img id="cropImg" alt="二维码截图" /><div id="cropBox"></div></div>
+      </div>
+      <div class="dialog-foot">
+        <label for="cropSize">选区大小</label>
+        <input id="cropSize" type="range" min="20" max="100" value="72" />
+        <span class="spacer"></span>
+        <button id="cancelCrop" class="secondary" type="button">取消</button>
+        <button id="confirmCrop" class="secondary strong" type="button">使用这个区域</button>
+      </div>
+    </dialog>
 
     <script type="module">
       const $ = (id) => document.getElementById(id);
-      const [drop, wrap, pic, ov, txt, go, msg, tip] =
-        ["drop","wrap","pic","ov","txt","go","msg","tip"].map($);
-      let dataUrl = null, box = null, drag = null;
-
-      const toSrc = (e) => {
-        const r = pic.getBoundingClientRect();
-        const k = pic.naturalWidth / r.width;
-        return { x: (e.clientX - r.left) * k, y: (e.clientY - r.top) * k };
+      const state = {
+        poster: null,
+        posterName: "",
+        qrMode: "text",
+        qrText: "",
+        qrData: null,
+        qrName: "",
+        box: null,
+        drag: null,
+        crop: null,
+        cropSourceName: "",
+        generating: 0,
       };
 
-      function redraw() {
-        ov.setAttribute("viewBox", `0 0 ${pic.naturalWidth} ${pic.naturalHeight}`);
-        const b = drag ?? box;
-        const t = Math.max(2, pic.naturalWidth / 300);
-        // 码是方的，预览就按短边画成方框 —— 免得用户拖了个长方形还以为能贴成那样
-        const s = b ? Math.min(b.w, b.h) : 0;
-        ov.innerHTML = b
-          ? `<rect x="${b.x}" y="${b.y}" width="${s}" height="${s}"
-                   fill="rgba(16,185,129,.15)" stroke="#10b981" stroke-width="${t}"/>`
-          : "";
-        sync();
-      }
-
-      const sync = () => {
-        const s = box ? Math.min(box.w, box.h) : 0;
-        go.disabled = !dataUrl || !box || s < 21 || !txt.value.trim();
-        tip.textContent = !box
-          ? "在海报上按住拖一个方框。"
-          : s < 21 ? "框太小了，二维码至少要 21 像素。"
-          : `将贴 ${Math.floor(s)}×${Math.floor(s)}。`;
-      };
-      txt.addEventListener("input", sync);
-
-      wrap.addEventListener("pointerdown", (e) => {
-        const p = toSrc(e);
-        drag = { x: p.x, y: p.y, w: 0, h: 0, _o: p };
-        wrap.setPointerCapture(e.pointerId);
-      });
-      wrap.addEventListener("pointermove", (e) => {
-        if (!drag) return;
-        const p = toSrc(e);
-        drag.x = Math.min(p.x, drag._o.x); drag.y = Math.min(p.y, drag._o.y);
-        drag.w = Math.abs(p.x - drag._o.x); drag.h = Math.abs(p.y - drag._o.y);
-        redraw();
-      });
-      wrap.addEventListener("pointerup", () => {
-        if (drag && Math.min(drag.w, drag.h) > 8) { delete drag._o; box = drag; }
-        drag = null; redraw();
-      });
-
-      function load(f) {
+      const readImage = (file) => new Promise((resolve, reject) => {
+        if (!file?.type?.startsWith("image/")) return reject(new Error("请选择图片文件"));
         const fr = new FileReader();
-        fr.onload = () => {
-          dataUrl = String(fr.result);
-          pic.src = dataUrl;
-          pic.onload = () => { drop.hidden = true; wrap.hidden = false; box = null; redraw(); };
-        };
-        fr.readAsDataURL(f);
+        fr.onerror = () => reject(new Error("图片读取失败"));
+        fr.onload = () => resolve(String(fr.result));
+        fr.readAsDataURL(file);
+      });
+
+      function setStatus(text, kind = "") {
+        $("status").textContent = text;
+        $("status").className = `status ${kind}`;
       }
-      document.addEventListener("dragover", (e) => e.preventDefault());
+
+      function setSourceMode(mode) {
+        state.qrMode = mode;
+        $("textTab").classList.toggle("on", mode === "text");
+        $("uploadTab").classList.toggle("on", mode === "upload");
+        $("textPanel").hidden = mode !== "text";
+        $("uploadPanel").hidden = mode !== "upload";
+        syncQrSource();
+      }
+
+      function hasQr() {
+        return state.qrMode === "text" ? !!state.qrText.trim() && !!state.qrData : !!state.qrData;
+      }
+
+      function defaultBox() {
+        if (!$("posterImg").naturalWidth) return;
+        const w = $("posterImg").naturalWidth;
+        const h = $("posterImg").naturalHeight;
+        const side = Math.max(21, Math.round(Math.min(w, h) * .22));
+        state.box = {
+          x: Math.max(0, w - side - Math.round(w * .045)),
+          y: Math.max(0, h - side - Math.round(h * .045)),
+          side,
+        };
+        syncBoxControls();
+      }
+
+      function clampBox() {
+        if (!state.box) return;
+        const w = $("posterImg").naturalWidth;
+        const h = $("posterImg").naturalHeight;
+        state.box.side = Math.max(21, Math.min(state.box.side, Math.min(w, h)));
+        state.box.x = Math.max(0, Math.min(state.box.x, w - state.box.side));
+        state.box.y = Math.max(0, Math.min(state.box.y, h - state.box.side));
+      }
+
+      function drawLayer() {
+        const ready = !!state.poster && hasQr() && !!state.box;
+        $("qrLayer").hidden = !ready;
+        if (!ready) return;
+        clampBox();
+        const w = $("posterImg").naturalWidth;
+        const h = $("posterImg").naturalHeight;
+        Object.assign($("qrLayer").style, {
+          left: `${state.box.x / w * 100}%`,
+          top: `${state.box.y / h * 100}%`,
+          width: `${state.box.side / w * 100}%`,
+          height: `${state.box.side / h * 100}%`,
+        });
+        $("layerImg").src = state.qrData;
+      }
+
+      function syncBoxControls() {
+        const enabled = !!state.poster && hasQr() && !!state.box;
+        const max = state.poster ? Math.max(21, Math.min($("posterImg").naturalWidth, $("posterImg").naturalHeight)) : 500;
+        $("sizeRange").max = String(max);
+        $("sizeNumber").max = String(max);
+        $("sizeRange").disabled = !enabled;
+        $("sizeNumber").disabled = !enabled;
+        $("resetPlace").disabled = !enabled;
+        document.querySelectorAll(".nudge").forEach((b) => { b.disabled = !enabled; });
+        if (state.box) {
+          $("sizeRange").value = String(Math.round(state.box.side));
+          $("sizeNumber").value = String(Math.round(state.box.side));
+          $("placeSummary").textContent = `${Math.round(state.box.side)} px`;
+        } else {
+          $("placeSummary").textContent = "等待素材";
+        }
+        $("adjustStep").classList.toggle("complete", enabled);
+        drawLayer();
+        syncExport();
+      }
+
+      function syncQrSource() {
+        const ready = hasQr();
+        $("qrStep").classList.toggle("complete", ready);
+        $("qrSummary").textContent = ready
+          ? (state.qrMode === "text" ? "标准真码" : "截图已裁剪")
+          : "未准备";
+        if (state.poster && ready && !state.box) defaultBox();
+        syncBoxControls();
+      }
+
+      function syncExport() {
+        const ready = !!state.poster && hasQr() && !!state.box;
+        $("exportBtn").disabled = !ready;
+        $("verifiedPill").classList.toggle("ready", ready);
+      }
+
+      async function generateQrPreview() {
+        const text = $("qrText").value.trim();
+        state.qrText = text;
+        $("textCount").textContent = `${text.length} / 2000`;
+        const ticket = ++state.generating;
+        if (!text) {
+          state.qrData = null;
+          $("textPreview").replaceChildren("等待内容");
+          syncQrSource();
+          return;
+        }
+        try {
+          const url = await pod.qr.encode(text, { scale: 7 });
+          if (ticket !== state.generating || state.qrMode !== "text") return;
+          state.qrData = url;
+          const img = new Image();
+          img.alt = "二维码";
+          img.src = url;
+          $("textPreview").replaceChildren(img);
+          syncQrSource();
+        } catch (e) {
+          if (ticket !== state.generating) return;
+          state.qrData = null;
+          $("textPreview").replaceChildren("生成失败");
+          setStatus(String(e.message || e), "bad");
+          syncQrSource();
+        }
+      }
+
+      let qrTimer = 0;
+      $("qrText").addEventListener("input", () => {
+        clearTimeout(qrTimer);
+        qrTimer = setTimeout(generateQrPreview, 260);
+      });
+
+      async function loadPoster(file) {
+        try {
+          const url = await readImage(file);
+          const img = $("posterImg");
+          img.onload = () => {
+            state.poster = url;
+            state.posterName = file.name || "粘贴的图片";
+            $("posterThumb").src = url;
+            $("posterThumb").hidden = false;
+            $("posterGlyph").hidden = true;
+            $("posterName").textContent = state.posterName;
+            $("posterSummary").textContent = `${img.naturalWidth}×${img.naturalHeight}`;
+            $("posterStep").classList.add("complete");
+            $("canvasMeta").textContent = `${state.posterName} · ${img.naturalWidth}×${img.naturalHeight}`;
+            $("empty").hidden = true;
+            $("poster").hidden = false;
+            defaultBox();
+            setStatus("海报已载入，准备真二维码。");
+          };
+          img.src = url;
+          $("result").hidden = true;
+        } catch (e) {
+          setStatus(String(e.message || e), "bad");
+        }
+      }
+
+      function openCrop(file) {
+        readImage(file).then((url) => {
+          state.cropSourceName = file.name || "二维码截图";
+          $("cropImg").onload = () => {
+            $("cropDialog").showModal();
+            requestAnimationFrame(resetCrop);
+          };
+          $("cropImg").src = url;
+        }).catch((e) => setStatus(String(e.message || e), "bad"));
+      }
+
+      function resetCrop() {
+        const img = $("cropImg");
+        const side = Math.round(Math.min(img.clientWidth, img.clientHeight) * (+$("cropSize").value / 100));
+        state.crop = {
+          x: Math.round((img.clientWidth - side) / 2),
+          y: Math.round((img.clientHeight - side) / 2),
+          side,
+        };
+        drawCrop();
+      }
+
+      function drawCrop() {
+        if (!state.crop) return;
+        const img = $("cropImg");
+        state.crop.side = Math.max(24, Math.min(state.crop.side, Math.min(img.clientWidth, img.clientHeight)));
+        state.crop.x = Math.max(0, Math.min(state.crop.x, img.clientWidth - state.crop.side));
+        state.crop.y = Math.max(0, Math.min(state.crop.y, img.clientHeight - state.crop.side));
+        Object.assign($("cropBox").style, {
+          left: `${state.crop.x}px`,
+          top: `${state.crop.y}px`,
+          width: `${state.crop.side}px`,
+          height: `${state.crop.side}px`,
+        });
+      }
+
+      $("cropSize").addEventListener("input", () => {
+        if (!state.crop) return;
+        const img = $("cropImg");
+        const oldCenter = { x: state.crop.x + state.crop.side / 2, y: state.crop.y + state.crop.side / 2 };
+        state.crop.side = Math.round(Math.min(img.clientWidth, img.clientHeight) * (+$("cropSize").value / 100));
+        state.crop.x = oldCenter.x - state.crop.side / 2;
+        state.crop.y = oldCenter.y - state.crop.side / 2;
+        drawCrop();
+      });
+
+      $("cropBox").addEventListener("pointerdown", (e) => {
+        state.cropDrag = { x: e.clientX, y: e.clientY, ox: state.crop.x, oy: state.crop.y };
+        $("cropBox").setPointerCapture(e.pointerId);
+      });
+      $("cropBox").addEventListener("pointermove", (e) => {
+        if (!state.cropDrag) return;
+        state.crop.x = state.cropDrag.ox + e.clientX - state.cropDrag.x;
+        state.crop.y = state.cropDrag.oy + e.clientY - state.cropDrag.y;
+        drawCrop();
+      });
+      $("cropBox").addEventListener("pointerup", () => { state.cropDrag = null; });
+      $("cancelCrop").onclick = () => $("cropDialog").close();
+      $("confirmCrop").onclick = () => {
+        const img = $("cropImg");
+        const sx = img.naturalWidth / img.clientWidth;
+        const sy = img.naturalHeight / img.clientHeight;
+        const canvas = document.createElement("canvas");
+        const side = Math.max(64, Math.round(state.crop.side * Math.max(sx, sy)));
+        canvas.width = side;
+        canvas.height = side;
+        const ctx = canvas.getContext("2d");
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(
+          img,
+          Math.round(state.crop.x * sx),
+          Math.round(state.crop.y * sy),
+          Math.round(state.crop.side * sx),
+          Math.round(state.crop.side * sy),
+          0,
+          0,
+          side,
+          side,
+        );
+        state.qrData = canvas.toDataURL("image/png");
+        state.qrName = state.cropSourceName;
+        $("uploadPreview").src = state.qrData;
+        $("uploadPreview").hidden = false;
+        $("uploadGlyph").hidden = true;
+        $("uploadName").textContent = `${state.qrName} · 已裁成正方形`;
+        $("cropDialog").close();
+        syncQrSource();
+        setStatus("二维码截图已裁剪，可在海报上调整位置。");
+      };
+
+      $("textTab").onclick = () => {
+        state.qrData = null;
+        setSourceMode("text");
+        generateQrPreview();
+      };
+      $("uploadTab").onclick = () => {
+        state.qrData = $("uploadPreview").hidden ? null : $("uploadPreview").src;
+        setSourceMode("upload");
+      };
+      $("posterDrop").onclick = () => $("posterFile").click();
+      $("empty").onclick = () => $("posterFile").click();
+      $("posterFile").onchange = (e) => e.target.files[0] && loadPoster(e.target.files[0]);
+      $("qrDrop").onclick = () => $("qrFile").click();
+      $("qrFile").onchange = (e) => e.target.files[0] && openCrop(e.target.files[0]);
+
+      document.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        $("posterDrop").classList.add("over");
+      });
+      document.addEventListener("dragleave", (e) => {
+        if (!e.relatedTarget) $("posterDrop").classList.remove("over");
+      });
       document.addEventListener("drop", (e) => {
         e.preventDefault();
-        const f = e.dataTransfer?.files?.[0];
-        if (f) load(f);
+        $("posterDrop").classList.remove("over");
+        const file = e.dataTransfer?.files?.[0];
+        if (!file) return;
+        const overQr = state.qrMode === "upload" && e.target.closest("#qrDrop");
+        overQr ? openCrop(file) : loadPoster(file);
       });
       document.addEventListener("paste", (e) => {
-        const i = [...(e.clipboardData?.items ?? [])].find((x) => x.type.startsWith("image/"));
-        if (i) load(i.getAsFile());
+        const item = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith("image/"));
+        const file = item?.getAsFile();
+        if (file) state.qrMode === "upload" ? openCrop(file) : loadPoster(file);
       });
 
-      go.onclick = async () => {
-        go.disabled = true;
-        msg.className = "hint";
-        msg.textContent = "贴上去并扫一遍…";
-        try {
-          // 和 AI 无头调用同一条路
-          const r = await pod.action("app.qrfix.code.replace", {
-            poster: dataUrl,
-            qr_text: txt.value.trim(),
-            at: { x: Math.floor(box.x), y: Math.floor(box.y),
-                  w: Math.floor(Math.min(box.w, box.h)), h: Math.floor(Math.min(box.w, box.h)) },
-          });
-          msg.className = "hint good";
-          msg.textContent = r.message + "（成品已进收件箱）";
-        } catch (e) {
-          // 扫不出来是**有用**的失败：它挡住了一张会被拿去印的废图
-          msg.className = "hint bad";
-          msg.textContent = String(e.message || e);
+      function setSize(value) {
+        if (!state.box) return;
+        state.box.side = Math.max(21, Math.min(+value || 21, Math.min($("posterImg").naturalWidth, $("posterImg").naturalHeight)));
+        clampBox();
+        syncBoxControls();
+      }
+      $("sizeRange").oninput = (e) => setSize(e.target.value);
+      $("sizeNumber").oninput = (e) => setSize(e.target.value);
+      $("resetPlace").onclick = defaultBox;
+      document.querySelectorAll(".nudge").forEach((button) => {
+        button.onclick = (e) => {
+          if (!state.box) return;
+          const base = Math.max(1, Math.round(Math.min($("posterImg").naturalWidth, $("posterImg").naturalHeight) / 250));
+          const step = e.shiftKey ? base * 10 : base;
+          state.box.x += +button.dataset.dx * step;
+          state.box.y += +button.dataset.dy * step;
+          clampBox();
+          syncBoxControls();
+        };
+      });
+
+      $("qrLayer").addEventListener("pointerdown", (e) => {
+        if (e.target === $("resizeHandle")) return;
+        state.drag = { kind: "move", x: e.clientX, y: e.clientY, box: { ...state.box } };
+        $("qrLayer").setPointerCapture(e.pointerId);
+      });
+      $("resizeHandle").addEventListener("pointerdown", (e) => {
+        e.stopPropagation();
+        state.drag = { kind: "resize", x: e.clientX, y: e.clientY, box: { ...state.box } };
+        $("resizeHandle").setPointerCapture(e.pointerId);
+      });
+      function moveLayer(e) {
+        if (!state.drag) return;
+        const rect = $("posterImg").getBoundingClientRect();
+        const scale = $("posterImg").naturalWidth / rect.width;
+        if (state.drag.kind === "move") {
+          state.box.x = state.drag.box.x + (e.clientX - state.drag.x) * scale;
+          state.box.y = state.drag.box.y + (e.clientY - state.drag.y) * scale;
+        } else {
+          state.box.side = state.drag.box.side + Math.max(e.clientX - state.drag.x, e.clientY - state.drag.y) * scale;
         }
-        sync();
+        clampBox();
+        syncBoxControls();
+      }
+      $("qrLayer").addEventListener("pointermove", moveLayer);
+      $("resizeHandle").addEventListener("pointermove", moveLayer);
+      $("qrLayer").addEventListener("pointerup", () => { state.drag = null; });
+      $("resizeHandle").addEventListener("pointerup", () => { state.drag = null; });
+
+      $("exportBtn").onclick = async () => {
+        $("exportBtn").disabled = true;
+        $("result").hidden = true;
+        setStatus("正在合成，并扫描最终成品…");
+        try {
+          const input = {
+            poster: state.poster,
+            at: {
+              x: Math.round(state.box.x),
+              y: Math.round(state.box.y),
+              w: Math.round(state.box.side),
+              h: Math.round(state.box.side),
+            },
+            verify: true,
+          };
+          if (state.qrMode === "text") input.qr_text = state.qrText.trim();
+          else input.qr_image = state.qrData;
+          const r = await pod.action("app.qrfix.code.replace", input);
+          $("resultImg").src = `/artifact/${encodeURIComponent(r.artifact.id)}`;
+          $("resultCopy").textContent = r.scanned_text ? `识别内容：${r.scanned_text}` : "成品已进入收件箱";
+          $("result").hidden = false;
+          setStatus(r.message, "good");
+        } catch (e) {
+          setStatus(String(e.message || e), "bad");
+        }
+        syncExport();
       };
+
+      setSourceMode("text");
     </script>
   </body>
 </html>

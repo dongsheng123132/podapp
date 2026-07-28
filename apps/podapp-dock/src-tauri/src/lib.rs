@@ -10,7 +10,7 @@ mod protocol;
 
 use podapp_runtime::{Capabilities, HostProfile, PodInfo};
 use serde_json::Value;
-use std::collections::HashSet;
+use std::collections::HashMap;
 use tauri::{Emitter, Manager};
 #[cfg(desktop)]
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
@@ -33,18 +33,68 @@ fn capabilities() -> Capabilities {
     Capabilities::builtin().with(podapp_qr::QrCapability)
 }
 
-/// 首次启动装入随应用发布的官方小程序。
+/// 比较内置小程序版本。官方清单只使用数字点分版本；遇到无法识别的版本时，
+/// 宁可不自动覆盖，让用户手动决定。
+fn bundled_version_is_newer(candidate: &str, installed: &str) -> bool {
+    fn parts(value: &str) -> Option<Vec<u64>> {
+        let core = value.trim().trim_start_matches('v').split('-').next()?;
+        let parsed: Option<Vec<u64>> = core.split('.').map(|part| part.parse().ok()).collect();
+        parsed.filter(|items| !items.is_empty())
+    }
+
+    let (Some(mut candidate), Some(mut installed)) = (parts(candidate), parts(installed)) else {
+        return false;
+    };
+    let width = candidate.len().max(installed.len());
+    candidate.resize(width, 0);
+    installed.resize(width, 0);
+    candidate > installed
+}
+
+/// 0.1.0 之前的首次安装只是把目录放进 apps，注册表自愈后来源会写成 `adopted`，
+/// 也没有 `.install.json`。只凭 ID 覆盖会伤到第三方同名包，所以再核对作者和官方主页。
+fn is_legacy_official_pod(id: &str, bundled: &podapp_runtime::manifest::Manifest) -> bool {
+    let installed_dir = podapp_runtime::apps_root().join(id);
+    let Ok((installed, _)) = podapp_runtime::manifest::load_dir(&installed_dir) else {
+        return false;
+    };
+    bundled.ident.author.as_deref() == Some("PodApp")
+        && bundled
+            .ident
+            .homepage
+            .as_deref()
+            .is_some_and(|url| url.starts_with("https://podapp.net/pods/"))
+        && installed.ident.author == bundled.ident.author
+        && installed.ident.homepage == bundled.ident.homepage
+}
+
+/// 首次启动装入随应用发布的官方小程序，并升级旧的官方内置版本。
 ///
-/// 只补缺失项，不覆盖用户已安装的同 ID 小程序。`pods/` 是源码唯一真相源，
-/// Tauri 构建时把它映射到资源目录；开发态则回退到仓库里的原目录。
+/// 只升级注册表来源为 `bundled` 的小程序，手工安装和同 ID 自定义版本不覆盖。
+/// 升级后恢复用户的启用与置顶选择。`pods/` 是源码唯一真相源，Tauri 构建时
+/// 把它映射到资源目录；开发态则回退到仓库里的原目录。
 fn install_missing_bundled_pods(app: &tauri::AppHandle) -> Vec<String> {
+    #[cfg(debug_assertions)]
+    let _ = app;
+    #[cfg(not(debug_assertions))]
     let release_root = app.path().resource_dir().ok().map(|p| p.join("pods"));
     let dev_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../pods");
+    // 开发目录里可能留着上一次 Tauri 打包复制的 resources/pods。开发态要始终认
+    // 仓库源码，否则改完清单重启仍会装旧版本，视觉上就像改动完全没生效。
+    #[cfg(debug_assertions)]
+    let root = dev_root;
+    #[cfg(not(debug_assertions))]
     let root = release_root.filter(|p| p.is_dir()).unwrap_or(dev_root);
-    let mut installed: HashSet<String> = podapp_runtime::registry::list()
+    let installed: HashMap<String, String> = podapp_runtime::registry::list()
         .into_iter()
-        .map(|p| p.id)
+        .map(|p| (p.id, p.version))
         .collect();
+    let entries: HashMap<String, podapp_runtime::registry::RegEntry> =
+        podapp_runtime::registry::read()
+            .apps
+            .into_iter()
+            .map(|entry| (entry.id.clone(), entry))
+            .collect();
     let mut errors = Vec::new();
 
     let mut dirs: Vec<_> = match std::fs::read_dir(&root) {
@@ -69,13 +119,32 @@ fn install_missing_bundled_pods(app: &tauri::AppHandle) -> Vec<String> {
             }
         };
         let id = manifest.ident.id.clone();
-        if installed.contains(&id) {
+        let previous = entries.get(&id);
+        let should_install = match installed.get(&id) {
+            None => true,
+            Some(version) => {
+                let official_source = previous.is_some_and(|entry| {
+                    entry.source == "bundled"
+                        || (entry.source == "adopted" && is_legacy_official_pod(&id, &manifest))
+                });
+                official_source && bundled_version_is_newer(&manifest.ident.version, version)
+            }
+        };
+        if !should_install {
             continue;
         }
         if let Err(e) = podapp_runtime::install::install_from_path(&dir, "bundled") {
             errors.push(format!("内置小程序 {id} 安装失败: {e}"));
-        } else {
-            installed.insert(id);
+            continue;
+        }
+
+        if let Some(previous) = previous {
+            let mut registry = podapp_runtime::registry::read();
+            if let Some(updated) = registry.apps.iter_mut().find(|entry| entry.id == id) {
+                updated.enabled = previous.enabled;
+                updated.pinned_home = previous.pinned_home;
+            }
+            podapp_runtime::registry::write(&registry);
         }
     }
     errors
@@ -154,6 +223,15 @@ async fn dock_open_pod(app: tauri::AppHandle, id: String) -> Result<(), String> 
 
 #[cfg(test)]
 mod pod_window_tests {
+    #[test]
+    fn bundled_versions_only_move_forward() {
+        assert!(super::bundled_version_is_newer("0.2.0", "0.1.9"));
+        assert!(super::bundled_version_is_newer("1.0", "0.9.9"));
+        assert!(!super::bundled_version_is_newer("0.2.0", "0.2.0"));
+        assert!(!super::bundled_version_is_newer("0.1.9", "0.2.0"));
+        assert!(!super::bundled_version_is_newer("next", "0.2.0"));
+    }
+
     #[test]
     fn pod_pages_are_custom_protocol_urls() {
         match super::pod_webview_url("org.podapp.image.nine-grid").unwrap() {

@@ -1,6 +1,6 @@
 {
   "spec_version": "0.5.0",
-  "application": { "id": "org.podapp.image.qrfix", "name": "替换二维码", "version": "0.1.0" },
+  "application": { "id": "org.podapp.image.qrfix", "name": "AI 海报二维码", "version": "0.2.0" },
   "surfaces": [
     { "id": "pod", "kind": "gui", "required_for_parity": true },
     { "id": "cli", "kind": "cli", "required_for_parity": true }

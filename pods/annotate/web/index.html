@@ -2,190 +2,694 @@
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>图片标注</title>
     <style>
-      :root { --bg:#14161a; --fg:#e6e8ec; --dim:#8b93a1; --line:#262a31; --accent:#f59e0b; --bad:#fca5a5; }
-      * { box-sizing:border-box; }
-      body { margin:0; background:var(--bg); color:var(--fg);
-             font:14px/1.6 "Microsoft YaHei UI", system-ui, sans-serif;
-             display:flex; flex-direction:column; height:100vh; }
-      header { padding:12px 18px; border-bottom:1px solid var(--line); font-weight:600; }
-      main { flex:1; display:flex; min-height:0; }
-      #stage { flex:1; display:grid; place-items:center; padding:16px; min-width:0; overflow:auto; }
-      #drop { border:1px dashed var(--line); border-radius:12px; padding:48px 32px;
-              text-align:center; color:var(--dim); }
-      #wrap { position:relative; line-height:0; cursor:crosshair; }
-      #pic { display:block; max-width:100%; max-height:70vh; border-radius:6px; }
-      svg { position:absolute; inset:0; width:100%; height:100%; }
-      aside { width:320px; border-left:1px solid var(--line); padding:14px;
-              display:flex; flex-direction:column; gap:10px; overflow-y:auto; }
-      .item { border:1px solid var(--line); border-radius:8px; padding:8px; }
-      .item .no { color:var(--accent); font-weight:600; font-size:12px; }
-      .item .rc { font-size:11px; color:var(--dim); }
-      textarea { width:100%; background:#0f1115; color:var(--fg); border:1px solid var(--line);
-                 border-radius:6px; padding:6px; font:inherit; font-size:12px; resize:vertical; }
-      button { background:var(--accent); color:#111; border:0; border-radius:8px;
-               padding:10px; font-size:14px; font-weight:600; cursor:pointer; }
-      button:disabled { background:#3a3f4a; color:var(--dim); cursor:not-allowed; }
-      button.ghost { background:none; border:1px solid var(--line); color:var(--dim); font-weight:400; }
-      .hint { font-size:12px; color:var(--dim); }
-      .bad { color:var(--bad); }
-      pre { background:#0f1115; border:1px solid var(--line); border-radius:8px; padding:8px;
-            font-size:11px; white-space:pre-wrap; word-break:break-all; max-height:200px; overflow:auto; }
+      :root {
+        color-scheme: dark;
+        --bg: #151716;
+        --panel: #1b1e1c;
+        --surface: #222624;
+        --surface-2: #292d2a;
+        --line: #363b37;
+        --line-strong: #4d534f;
+        --text: #f2f4f1;
+        --muted: #a1a8a3;
+        --faint: #747b76;
+        --accent: #f0a04b;
+        --accent-ink: #1a0d02;
+        --bad: #ff7979;
+        --good: #68d399;
+      }
+      * { box-sizing: border-box; }
+      [hidden] { display: none !important; }
+      button, input, textarea { font: inherit; letter-spacing: 0; }
+      body {
+        margin: 0;
+        height: 100vh;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--text);
+        font: 14px/1.5 "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
+      }
+      .appbar {
+        height: 56px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 18px;
+        border-bottom: 1px solid var(--line);
+        background: #181b19;
+      }
+      .mark {
+        width: 30px;
+        height: 30px;
+        position: relative;
+        border: 1px solid #8c602f;
+        border-radius: 7px;
+        background: #342617;
+      }
+      .mark::before {
+        content: "";
+        position: absolute;
+        inset: 7px;
+        border: 2px solid var(--accent);
+      }
+      .mark::after {
+        content: "1";
+        position: absolute;
+        right: 2px;
+        top: 2px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--accent);
+        color: var(--accent-ink);
+        font: 700 8px/12px "Segoe UI", sans-serif;
+        text-align: center;
+      }
+      .title strong { display: block; font-size: 15px; font-weight: 650; }
+      .title span { display: block; color: var(--muted); font-size: 11px; }
+      .spacer { flex: 1; }
+      .file-meta {
+        max-width: 300px;
+        color: var(--muted);
+        font-size: 11px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .button, .icon-btn, .tool {
+        height: 32px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--surface);
+        color: var(--text);
+        cursor: pointer;
+      }
+      .button { padding: 0 12px; font-size: 12px; }
+      .icon-btn { width: 32px; display: grid; place-items: center; padding: 0; font-size: 17px; }
+      .button:hover, .icon-btn:hover, .tool:hover { border-color: var(--line-strong); background: var(--surface-2); }
+      .button:disabled, .icon-btn:disabled { opacity: .35; cursor: default; }
+      .workspace {
+        height: calc(100vh - 56px);
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 340px;
+      }
+      .stage-area {
+        min-width: 0;
+        min-height: 0;
+        display: grid;
+        grid-template-rows: 42px minmax(0, 1fr);
+        background: #101211;
+      }
+      .stage-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 0 14px;
+        border-bottom: 1px solid #292d2a;
+      }
+      .tool {
+        min-width: 74px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        padding: 0 9px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .tool.on { border-color: #8c602f; background: #342617; color: #ffd6a8; }
+      .tool-symbol { width: 13px; height: 11px; border: 1px dashed currentColor; }
+      .stage-hint { margin-left: 7px; color: var(--muted); font-size: 11px; }
+      .canvas {
+        min-height: 0;
+        display: grid;
+        place-items: center;
+        overflow: auto;
+        padding: 26px;
+        background-color: #111311;
+        background-image:
+          linear-gradient(#1d201e 1px, transparent 1px),
+          linear-gradient(90deg, #1d201e 1px, transparent 1px);
+        background-size: 22px 22px;
+      }
+      .empty {
+        width: min(470px, 82%);
+        padding: 38px 22px;
+        border: 1px dashed #414742;
+        border-radius: 8px;
+        background: #161917;
+        text-align: center;
+        cursor: pointer;
+      }
+      .empty-visual {
+        width: 132px;
+        height: 90px;
+        position: relative;
+        margin: 0 auto 18px;
+        border: 1px solid #3d423f;
+        border-radius: 6px;
+        background:
+          linear-gradient(145deg, transparent 49%, #303532 50%, transparent 51%),
+          #222624;
+      }
+      .empty-visual::before {
+        content: "";
+        position: absolute;
+        left: 23px;
+        top: 17px;
+        width: 57px;
+        height: 35px;
+        border: 2px solid var(--accent);
+        background: rgba(240,160,75,.08);
+      }
+      .empty-visual::after {
+        content: "1";
+        position: absolute;
+        left: 17px;
+        top: 11px;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: var(--accent);
+        color: var(--accent-ink);
+        font: 700 10px/18px "Segoe UI", sans-serif;
+      }
+      .empty b { display: block; font-size: 14px; }
+      .empty span { display: block; margin-top: 6px; color: var(--muted); font-size: 12px; }
+      .image-wrap {
+        position: relative;
+        line-height: 0;
+        cursor: crosshair;
+        user-select: none;
+        box-shadow: 0 18px 50px rgba(0,0,0,.45);
+      }
+      #image {
+        display: block;
+        max-width: min(100%, 1000px);
+        max-height: calc(100vh - 145px);
+        border-radius: 3px;
+        pointer-events: none;
+      }
+      #overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+      .inspector {
+        min-height: 0;
+        display: grid;
+        grid-template-rows: auto minmax(120px, 1fr) auto;
+        border-left: 1px solid var(--line);
+        background: var(--panel);
+      }
+      .queue-head {
+        padding: 14px 15px 12px;
+        border-bottom: 1px solid var(--line);
+      }
+      .queue-title { display: flex; align-items: center; gap: 8px; }
+      .queue-title b { font-size: 13px; font-weight: 650; }
+      .count {
+        min-width: 20px;
+        height: 20px;
+        padding: 0 5px;
+        border-radius: 10px;
+        background: var(--surface-2);
+        color: var(--muted);
+        font-size: 10px;
+        line-height: 20px;
+        text-align: center;
+      }
+      .queue-head p { margin: 5px 0 0; color: var(--muted); font-size: 11px; }
+      .annotation-list { min-height: 0; overflow-y: auto; padding: 8px; }
+      .list-empty {
+        display: grid;
+        place-items: center;
+        min-height: 130px;
+        color: var(--faint);
+        font-size: 11px;
+        text-align: center;
+      }
+      .annotation {
+        margin-bottom: 7px;
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: #191c1a;
+        cursor: pointer;
+      }
+      .annotation.active { border-color: #8c602f; background: #211d17; }
+      .annotation-head { display: flex; align-items: center; gap: 8px; }
+      .badge {
+        width: 23px;
+        height: 23px;
+        flex: 0 0 auto;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        background: var(--accent);
+        color: var(--accent-ink);
+        font-size: 10px;
+        font-weight: 800;
+      }
+      .coords { min-width: 0; flex: 1; color: var(--muted); font-size: 10px; }
+      .delete {
+        width: 25px;
+        height: 25px;
+        padding: 0;
+        border: 0;
+        border-radius: 5px;
+        background: transparent;
+        color: var(--faint);
+        cursor: pointer;
+        font-size: 17px;
+      }
+      .delete:hover { background: #352021; color: var(--bad); }
+      textarea {
+        width: 100%;
+        margin-top: 8px;
+        padding: 8px 9px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        outline: 0;
+        resize: vertical;
+        background: #141715;
+        color: var(--text);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+      textarea:focus { border-color: #8c602f; box-shadow: 0 0 0 2px #302315; }
+      .output {
+        padding: 14px;
+        border-top: 1px solid var(--line);
+        background: #191c1a;
+      }
+      .output label { display: block; color: var(--muted); font-size: 11px; }
+      #note { min-height: 52px; max-height: 110px; }
+      .primary {
+        width: 100%;
+        height: 42px;
+        margin-top: 10px;
+        border: 0;
+        border-radius: 7px;
+        background: var(--accent);
+        color: var(--accent-ink);
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .primary:hover { background: #f5ad60; }
+      .primary:disabled { background: #45423d; color: #8c8983; cursor: default; }
+      .status { min-height: 30px; padding-top: 8px; color: var(--muted); font-size: 11px; }
+      .status.good { color: var(--good); }
+      .status.bad { color: var(--bad); }
+      .result {
+        margin-top: 9px;
+        padding-top: 11px;
+        border-top: 1px solid var(--line);
+      }
+      .result-head { display: flex; align-items: center; gap: 9px; }
+      .result-head img {
+        width: 52px;
+        height: 52px;
+        border: 1px solid var(--line);
+        border-radius: 5px;
+        object-fit: cover;
+      }
+      .result-head b { display: block; color: var(--good); font-size: 12px; }
+      .result-head span { display: block; color: var(--muted); font-size: 10px; }
+      .copy {
+        height: 30px;
+        margin-left: auto;
+        padding: 0 10px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--surface);
+        color: var(--text);
+        cursor: pointer;
+        font-size: 11px;
+      }
+      #prompt {
+        max-height: 110px;
+        margin-top: 9px;
+        overflow: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+        color: var(--muted);
+        font: 10px/1.55 "Cascadia Mono", Consolas, monospace;
+      }
+      @media (max-width: 780px) {
+        body { overflow: auto; }
+        .workspace { height: auto; grid-template-columns: 1fr; }
+        .stage-area { min-height: 560px; }
+        .inspector { min-height: 620px; border-left: 0; border-top: 1px solid var(--line); }
+        .file-meta { display: none; }
+      }
     </style>
   </head>
   <body>
-    <header>图片标注 —— 框出要改的地方，生成给 AI 的任务</header>
-    <main>
-      <section id="stage">
-        <div id="drop">把图拖进来，或 Ctrl+V 粘贴</div>
-        <div id="wrap" hidden><img id="pic" alt="待标注的图" /><svg id="ov"></svg></div>
+    <header class="appbar">
+      <span class="mark" aria-hidden="true"></span>
+      <div class="title">
+        <strong>图片标注</strong>
+        <span>框出修改区域，生成 AI 可直接执行的任务书</span>
+      </div>
+      <span id="fileMeta" class="file-meta">尚未载入图片</span>
+      <span class="spacer"></span>
+      <button id="chooseBtn" class="button" type="button">选择图片</button>
+      <button id="resetBtn" class="icon-btn" type="button" title="重新开始" disabled>↺</button>
+      <input id="fileInput" type="file" accept="image/*" hidden />
+    </header>
+
+    <main class="workspace">
+      <section class="stage-area">
+        <div class="stage-toolbar">
+          <button class="tool on" type="button"><span class="tool-symbol"></span>框选区域</button>
+          <button id="undoBtn" class="icon-btn" type="button" title="撤销最后一个标注" disabled>↶</button>
+          <button id="clearBtn" class="icon-btn" type="button" title="清空所有标注" disabled>×</button>
+          <span id="stageHint" class="stage-hint">载入图片后，在画布上拖出矩形</span>
+        </div>
+        <div class="canvas">
+          <div id="empty" class="empty" role="button" tabindex="0">
+            <div class="empty-visual" aria-hidden="true"></div>
+            <b>放入需要修改的图片</b>
+            <span>拖放、选择文件或 Ctrl+V 粘贴</span>
+          </div>
+          <div id="imageWrap" class="image-wrap" hidden>
+            <img id="image" alt="标注画布" />
+            <svg id="overlay"></svg>
+          </div>
+        </div>
       </section>
-      <aside>
-        <div class="hint" id="tip">在图上按住拖一个框。</div>
-        <div id="list"></div>
-        <textarea id="note" rows="2" placeholder="补充说明（可选）"></textarea>
-        <button id="go" disabled>生成任务</button>
-        <div id="msg" class="hint"></div>
-        <pre id="outp" hidden></pre>
+
+      <aside class="inspector">
+        <div class="queue-head">
+          <div class="queue-title"><b>修改任务</b><span id="count" class="count">0</span></div>
+          <p id="queueHint">每框一处，就写清这一处要怎么改。</p>
+        </div>
+        <div id="annotationList" class="annotation-list">
+          <div class="list-empty">画布上的编号与这里一一对应</div>
+        </div>
+        <div class="output">
+          <label for="note">整张图的补充要求</label>
+          <textarea id="note" rows="2" placeholder="例如：保持原有品牌色和画面比例（可选）"></textarea>
+          <button id="buildBtn" class="primary" type="button" disabled>生成标注图和任务书</button>
+          <div id="status" class="status">请先框选修改区域并填写要求。</div>
+          <div id="result" class="result" hidden>
+            <div class="result-head">
+              <img id="resultImg" alt="标注结果" />
+              <div><b>任务书已生成</b><span id="resultMeta"></span></div>
+              <button id="copyBtn" class="copy" type="button">复制任务</button>
+            </div>
+            <div id="prompt"></div>
+          </div>
+        </div>
       </aside>
     </main>
 
     <script type="module">
       const $ = (id) => document.getElementById(id);
-      const [drop, wrap, pic, ov, list, go, msg, outp, note, tip] =
-        ["drop","wrap","pic","ov","list","go","msg","outp","note","tip"].map($);
-
-      let dataUrl = null;
-      let boxes = [];       // 原图像素坐标
-      let dragging = null;
-
-      /** 显示坐标 → 原图像素。**所有存下来的都是原图坐标** ——
-          存显示坐标的话，换个窗口大小框就偏了，而偏移量还随尺寸变。 */
-      const toSrc = (e) => {
-        const r = pic.getBoundingClientRect();
-        const k = pic.naturalWidth / r.width;
-        return { x: (e.clientX - r.left) * k, y: (e.clientY - r.top) * k };
+      const state = {
+        image: null,
+        name: "",
+        boxes: [],
+        drawing: null,
+        active: -1,
+        working: false,
+        prompt: "",
       };
 
-      function redraw() {
-        ov.setAttribute("viewBox", `0 0 ${pic.naturalWidth} ${pic.naturalHeight}`);
-        const t = Math.max(2, pic.naturalWidth / 300);
-        const live = dragging ? [...boxes, dragging] : boxes;
-        ov.innerHTML = live
-          .map((b, i) => `
-            <rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}"
-                  fill="rgba(245,158,11,.12)" stroke="#f59e0b" stroke-width="${t}"/>
-            <text x="${b.x + t * 2}" y="${b.y + t * 12}" fill="#f59e0b"
-                  font-size="${t * 12}" font-weight="700">${i + 1}</text>`)
-          .join("");
-        renderList();
-      }
-
-      function renderList() {
-        list.replaceChildren(
-          ...boxes.map((b, i) => {
-            const d = document.createElement("div");
-            d.className = "item";
-            const no = document.createElement("div");
-            no.className = "no";
-            no.textContent = `第 ${i + 1} 处`;
-            const rc = document.createElement("div");
-            rc.className = "rc";
-            rc.textContent = `(${Math.round(b.x)}, ${Math.round(b.y)}) ${Math.round(b.w)}×${Math.round(b.h)}`;
-            const ta = document.createElement("textarea");
-            ta.rows = 2;
-            ta.placeholder = "这里要怎么改？";
-            ta.value = b.instruction ?? "";
-            ta.oninput = () => { b.instruction = ta.value; syncGo(); };
-            const del = document.createElement("button");
-            del.className = "ghost";
-            del.textContent = "删掉这处";
-            del.onclick = () => { boxes.splice(i, 1); redraw(); syncGo(); };
-            d.append(no, rc, ta, del);
-            return d;
-          }),
-        );
-      }
-
-      // 每一处都得写清楚要改什么。少写一处就发给 AI，那一处它只能猜 ——
-      // 而这个程序舱存在的全部理由就是让它不用猜。
-      const syncGo = () => {
-        go.disabled = boxes.length === 0 || boxes.some((b) => !(b.instruction ?? "").trim());
-        tip.textContent = boxes.length === 0
-          ? "在图上按住拖一个框。"
-          : go.disabled ? "还有标注没写要求。" : `${boxes.length} 处，可以生成了。`;
-      };
-
-      wrap.addEventListener("pointerdown", (e) => {
-        const p = toSrc(e);
-        dragging = { x: p.x, y: p.y, w: 0, h: 0, _ox: p.x, _oy: p.y };
-        wrap.setPointerCapture(e.pointerId);
-      });
-      wrap.addEventListener("pointermove", (e) => {
-        if (!dragging) return;
-        const p = toSrc(e);
-        dragging.x = Math.min(p.x, dragging._ox);
-        dragging.y = Math.min(p.y, dragging._oy);
-        dragging.w = Math.abs(p.x - dragging._ox);
-        dragging.h = Math.abs(p.y - dragging._oy);
-        redraw();
-      });
-      wrap.addEventListener("pointerup", () => {
-        // 太小的多半是误点，不是标注
-        if (dragging && dragging.w > 8 && dragging.h > 8) {
-          delete dragging._ox; delete dragging._oy;
-          boxes.push({ ...dragging, instruction: "" });
-        }
-        dragging = null;
-        redraw();
-        syncGo();
-      });
-
-      function load(file) {
+      const readImage = (file) => new Promise((resolve, reject) => {
+        if (!file?.type?.startsWith("image/")) return reject(new Error("请选择图片文件"));
         const fr = new FileReader();
-        fr.onload = () => {
-          dataUrl = String(fr.result);
-          pic.src = dataUrl;
-          pic.onload = () => { drop.hidden = true; wrap.hidden = false; boxes = []; redraw(); syncGo(); };
-        };
+        fr.onload = () => resolve(String(fr.result));
+        fr.onerror = () => reject(new Error("图片读取失败"));
         fr.readAsDataURL(file);
+      });
+
+      function setStatus(text, kind = "") {
+        $("status").textContent = text;
+        $("status").className = `status ${kind}`;
       }
+
+      function toSource(e) {
+        const rect = $("image").getBoundingClientRect();
+        return {
+          x: Math.max(0, Math.min($("image").naturalWidth, (e.clientX - rect.left) * $("image").naturalWidth / rect.width)),
+          y: Math.max(0, Math.min($("image").naturalHeight, (e.clientY - rect.top) * $("image").naturalHeight / rect.height)),
+        };
+      }
+
+      function drawOverlay() {
+        const image = $("image");
+        if (!image.naturalWidth) return;
+        const stroke = Math.max(2, image.naturalWidth / 420);
+        const all = state.drawing ? [...state.boxes, state.drawing] : state.boxes;
+        $("overlay").setAttribute("viewBox", `0 0 ${image.naturalWidth} ${image.naturalHeight}`);
+        $("overlay").innerHTML = all.map((box, index) => {
+          const active = index === state.active;
+          const width = active ? stroke * 1.5 : stroke;
+          const labelSize = stroke * 12;
+          return `
+            <rect x="${box.x}" y="${box.y}" width="${box.w}" height="${box.h}"
+                  fill="rgba(240,160,75,${active ? ".17" : ".09"})"
+                  stroke="${active ? "#ffd09b" : "#f0a04b"}" stroke-width="${width}"/>
+            <circle cx="${box.x + labelSize * .55}" cy="${box.y + labelSize * .55}"
+                    r="${labelSize * .55}" fill="#f0a04b"/>
+            <text x="${box.x + labelSize * .55}" y="${box.y + labelSize * .72}"
+                  fill="#1a0d02" text-anchor="middle" font-size="${labelSize * .68}"
+                  font-weight="800">${index + 1}</text>
+          `;
+        }).join("");
+      }
+
+      function renderList(focusIndex = -1) {
+        const list = $("annotationList");
+        if (!state.boxes.length) {
+          list.innerHTML = '<div class="list-empty">画布上的编号与这里一一对应</div>';
+        } else {
+          list.replaceChildren(...state.boxes.map((box, index) => {
+            const item = document.createElement("article");
+            item.className = `annotation ${state.active === index ? "active" : ""}`;
+            item.onclick = () => {
+              state.active = index;
+              drawOverlay();
+              renderList();
+            };
+            const head = document.createElement("div");
+            head.className = "annotation-head";
+            const badge = document.createElement("span");
+            badge.className = "badge";
+            badge.textContent = index + 1;
+            const coords = document.createElement("span");
+            coords.className = "coords";
+            coords.textContent = `x ${Math.round(box.x)} · y ${Math.round(box.y)} · ${Math.round(box.w)}×${Math.round(box.h)}`;
+            const del = document.createElement("button");
+            del.className = "delete";
+            del.type = "button";
+            del.title = "删除这一处";
+            del.textContent = "×";
+            del.onclick = (e) => {
+              e.stopPropagation();
+              state.boxes.splice(index, 1);
+              state.active = Math.min(state.active, state.boxes.length - 1);
+              drawOverlay();
+              renderList();
+              sync();
+            };
+            const input = document.createElement("textarea");
+            input.rows = 2;
+            input.placeholder = "这一处要怎么改？";
+            input.value = box.instruction;
+            input.onclick = (e) => e.stopPropagation();
+            input.onfocus = () => {
+              state.active = index;
+              drawOverlay();
+              document.querySelectorAll(".annotation").forEach((el, i) => el.classList.toggle("active", i === index));
+            };
+            input.oninput = () => {
+              box.instruction = input.value;
+              sync();
+            };
+            head.append(badge, coords, del);
+            item.append(head, input);
+            if (index === focusIndex) requestAnimationFrame(() => input.focus());
+            return item;
+          }));
+        }
+        $("count").textContent = state.boxes.length;
+      }
+
+      function sync() {
+        const complete = state.boxes.length > 0 && state.boxes.every((b) => b.instruction.trim());
+        $("buildBtn").disabled = state.working || !state.image || !complete;
+        $("undoBtn").disabled = state.boxes.length === 0;
+        $("clearBtn").disabled = state.boxes.length === 0;
+        $("queueHint").textContent = !state.boxes.length
+          ? "每框一处，就写清这一处要怎么改。"
+          : complete
+            ? `${state.boxes.length} 处要求已写完整，可以生成任务。`
+            : "还有标注没有填写修改要求。";
+        $("stageHint").textContent = state.boxes.length
+          ? `已标注 ${state.boxes.length} 处，继续拖框或填写右侧要求`
+          : "在画布上按住并拖出矩形";
+      }
+
+      function addBox(box) {
+        state.boxes.push({ ...box, instruction: "" });
+        state.active = state.boxes.length - 1;
+        drawOverlay();
+        renderList(state.active);
+        sync();
+      }
+
+      $("imageWrap").addEventListener("pointerdown", (e) => {
+        if (e.button !== 0) return;
+        const point = toSource(e);
+        state.drawing = { x: point.x, y: point.y, w: 0, h: 0, ox: point.x, oy: point.y };
+        $("imageWrap").setPointerCapture(e.pointerId);
+      });
+      $("imageWrap").addEventListener("pointermove", (e) => {
+        if (!state.drawing) return;
+        const point = toSource(e);
+        state.drawing.x = Math.min(point.x, state.drawing.ox);
+        state.drawing.y = Math.min(point.y, state.drawing.oy);
+        state.drawing.w = Math.abs(point.x - state.drawing.ox);
+        state.drawing.h = Math.abs(point.y - state.drawing.oy);
+        drawOverlay();
+      });
+      $("imageWrap").addEventListener("pointerup", () => {
+        if (!state.drawing) return;
+        const box = state.drawing;
+        state.drawing = null;
+        delete box.ox;
+        delete box.oy;
+        if (box.w >= 8 && box.h >= 8) addBox(box);
+        else drawOverlay();
+      });
+
+      async function loadFile(file) {
+        try {
+          const url = await readImage(file);
+          const image = $("image");
+          image.onload = () => {
+            state.image = url;
+            state.name = file.name || "粘贴的图片";
+            state.boxes = [];
+            state.active = -1;
+            $("fileMeta").textContent = `${state.name} · ${image.naturalWidth}×${image.naturalHeight}`;
+            $("empty").hidden = true;
+            $("imageWrap").hidden = false;
+            $("resetBtn").disabled = false;
+            $("result").hidden = true;
+            drawOverlay();
+            renderList();
+            sync();
+            setStatus("图片已载入，请在画布上框选要修改的区域。");
+          };
+          image.src = url;
+        } catch (e) {
+          setStatus(String(e.message || e), "bad");
+        }
+      }
+
+      function reset() {
+        state.image = null;
+        state.name = "";
+        state.boxes = [];
+        state.active = -1;
+        $("image").removeAttribute("src");
+        $("empty").hidden = false;
+        $("imageWrap").hidden = true;
+        $("resetBtn").disabled = true;
+        $("fileMeta").textContent = "尚未载入图片";
+        $("result").hidden = true;
+        renderList();
+        sync();
+        setStatus("请先载入图片。");
+      }
+
+      $("chooseBtn").onclick = () => $("fileInput").click();
+      $("empty").onclick = () => $("fileInput").click();
+      $("fileInput").onchange = (e) => e.target.files[0] && loadFile(e.target.files[0]);
+      $("resetBtn").onclick = reset;
+      $("undoBtn").onclick = () => {
+        state.boxes.pop();
+        state.active = state.boxes.length - 1;
+        drawOverlay();
+        renderList();
+        sync();
+      };
+      $("clearBtn").onclick = () => {
+        state.boxes = [];
+        state.active = -1;
+        drawOverlay();
+        renderList();
+        sync();
+      };
+      document.addEventListener("keydown", (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !e.target.matches("textarea,input")) {
+          e.preventDefault();
+          $("undoBtn").click();
+        }
+        if (e.key === "Delete" && state.active >= 0 && !e.target.matches("textarea,input")) {
+          state.boxes.splice(state.active, 1);
+          state.active = Math.min(state.active, state.boxes.length - 1);
+          drawOverlay();
+          renderList();
+          sync();
+        }
+      });
       document.addEventListener("dragover", (e) => e.preventDefault());
       document.addEventListener("drop", (e) => {
         e.preventDefault();
-        const f = e.dataTransfer?.files?.[0];
-        if (f) load(f);
+        const file = e.dataTransfer?.files?.[0];
+        if (file) loadFile(file);
       });
       document.addEventListener("paste", (e) => {
-        const i = [...(e.clipboardData?.items ?? [])].find((x) => x.type.startsWith("image/"));
-        if (i) load(i.getAsFile());
+        const item = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith("image/"));
+        const file = item?.getAsFile();
+        if (file) loadFile(file);
       });
 
-      go.onclick = async () => {
-        go.disabled = true;
-        msg.className = "hint";
-        msg.textContent = "生成中…";
+      $("buildBtn").onclick = async () => {
+        state.working = true;
+        sync();
+        $("result").hidden = true;
+        setStatus("正在生成编号标注图和结构化任务书…");
         try {
-          // 和 AI 无头调用同一条路
-          const r = await pod.action("app.annotate.task.build", {
-            image: dataUrl,
-            annotations: boxes.map((b) => ({
-              x: Math.round(b.x), y: Math.round(b.y),
-              w: Math.round(b.w), h: Math.round(b.h),
-              instruction: b.instruction.trim(),
+          const result = await pod.action("app.annotate.task.build", {
+            image: state.image,
+            annotations: state.boxes.map((box) => ({
+              x: Math.round(box.x),
+              y: Math.round(box.y),
+              w: Math.round(box.w),
+              h: Math.round(box.h),
+              instruction: box.instruction.trim(),
             })),
-            ...(note.value.trim() ? { note: note.value.trim() } : {}),
+            ...($("note").value.trim() ? { note: $("note").value.trim() } : {}),
           });
-          msg.textContent = r.message + "（标注图已进收件箱）";
-          outp.hidden = false;
-          outp.textContent = r.prompt;
+          state.prompt = result.prompt;
+          $("resultImg").src = `/artifact/${encodeURIComponent(result.overlay.id)}`;
+          $("resultMeta").textContent = `${result.count} 处标注 · 已进入收件箱`;
+          $("prompt").textContent = result.prompt;
+          $("result").hidden = false;
+          setStatus(result.message, "good");
         } catch (e) {
-          msg.className = "hint bad";
-          msg.textContent = String(e.message || e);
+          setStatus(String(e.message || e), "bad");
         }
-        syncGo();
+        state.working = false;
+        sync();
       };
+      $("copyBtn").onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(state.prompt);
+          $("copyBtn").textContent = "已复制";
+          setTimeout(() => { $("copyBtn").textContent = "复制任务"; }, 1400);
+        } catch {
+          setStatus("系统未允许直接复制，请在下方任务文字中手动选择。", "bad");
+        }
+      };
+
+      renderList();
+      sync();
     </script>
   </body>
 </html>

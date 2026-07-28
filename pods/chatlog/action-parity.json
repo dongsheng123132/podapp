@@ -1,6 +1,6 @@
 {
   "spec_version": "0.5.0",
-  "application": { "id": "org.podapp.codex.chatlog", "name": "对话导出", "version": "0.1.0" },
+  "application": { "id": "org.podapp.codex.chatlog", "name": "对话导出", "version": "0.2.1" },
   "surfaces": [
     { "id": "pod", "kind": "gui", "required_for_parity": true },
     { "id": "cli", "kind": "cli", "required_for_parity": true }

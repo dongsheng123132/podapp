@@ -3,7 +3,7 @@
   "application": {
     "id": "org.podapp.image.annotate",
     "name": "图片标注",
-    "version": "0.1.0"
+    "version": "0.2.0"
   },
   "surfaces": [
     { "id": "pod", "kind": "gui", "required_for_parity": true },

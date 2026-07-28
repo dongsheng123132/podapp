@@ -4,7 +4,7 @@
     "id": "org.podapp.codex.chatlog",
     "slug": "chatlog",
     "name": "对话导出",
-    "version": "0.1.0",
+    "version": "0.2.1",
     "summary": "把 Codex 会话导成 Markdown / HTML",
     "description": "挑一次会话，导成能直接贴进文档或提交进仓库的 Markdown（或 HTML）。系统提示词不会被导出去。也可以把已经导出的 .jsonl 直接拖进来 —— 那条路不依赖 Codex 装在哪、版本是几。",
     "author": "PodApp",
@@ -17,7 +17,7 @@
   "package": { "kind": "web", "web": { "root": "web", "entry": "index.html", "actions": "actions.mjs" } },
   "ui": {
     "icon": "lucide:file-text",
-    "accent": "#38bdf8",
+    "accent": "#73c6a7",
     "container": "window",
     "window": { "width": 940, "height": 700, "resizable": true },
     "home_dock": true,

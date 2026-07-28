@@ -3,9 +3,9 @@
   "pod": {
     "id": "org.podapp.image.qrfix",
     "slug": "qrfix",
-    "name": "替换二维码",
-    "version": "0.1.0",
-    "summary": "AI 画的二维码扫不出来，用真码盖掉它",
+    "name": "AI 海报二维码",
+    "version": "0.2.0",
+    "summary": "给 AI 海报换上可扫描、经过成品校验的真二维码",
     "description": "AI 能画出好看的海报，但画不出能扫的二维码 —— 微信/支付宝的码是平台颁发的，模型只能画个像的。这个程序舱把真二维码贴到指定位置，并且**导出前先扫一遍**：扫不出来就不给你，免得印出来才发现。",
     "author": "PodApp",
     "homepage": "https://podapp.net/pods/qrfix",
@@ -20,12 +20,12 @@
   },
   "ui": {
     "icon": "lucide:qr-code",
-    "accent": "#10b981",
+    "accent": "#39c77c",
     "container": "window",
     "window": { "width": 1000, "height": 720, "resizable": true },
     "home_dock": true,
     "quick_actions": [
-      { "action": "app.qrfix.code.replace", "label": "贴真二维码", "icon": "lucide:qr-code" }
+      { "action": "app.qrfix.code.replace", "label": "制作海报真码", "icon": "lucide:qr-code" }
     ],
     "annotation": {
       "kind": "rect",
