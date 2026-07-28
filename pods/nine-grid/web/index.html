@@ -241,6 +241,12 @@
       }
       .primary:hover { background: #5cc9db; }
       .primary:disabled { background: #3c4240; color: #838985; cursor: default; }
+      .check { display: flex; align-items: center; gap: 7px; cursor: pointer; }
+      .check input { accent-color: #5cc9db; }
+      /* 下载链横跨整行 —— 它和九个缩略图是并列的一件东西，不是第十张图 */
+      .ziprow { grid-column: 1 / -1; padding-top: 4px; }
+      .ziprow a { color: #5cc9db; font-size: 11px; text-decoration: none; }
+      .ziprow a:hover { text-decoration: underline; }
       .status { min-height: 32px; padding-top: 9px; color: var(--muted); font-size: 11px; }
       .status.bad { color: var(--bad); }
       .status.good { color: var(--good); }
@@ -344,6 +350,13 @@
         </section>
 
         <section class="section">
+          <label class="check"
+            ><input id="zipPack" type="checkbox" /><b>同时打包成一个 zip</b></label
+          >
+          <div class="hint">切片照常一张张交付；打包只是额外多一件，方便一次拿走。</div>
+        </section>
+
+        <section class="section">
           <div class="section-head"><b>预计输出</b><span id="countSummary">9 张</span></div>
           <div class="estimate">
             <div class="metric"><span>单张约</span><b id="cellMetric">--</b></div>
@@ -369,6 +382,9 @@
         rows: Math.round(clamp($("rows").value, 1, 12, 3)),
         cols: Math.round(clamp($("cols").value, 1, 12, 3)),
         gap: Math.round(clamp($("gap").value, 0, 512, 0)),
+        // 界面点的和 AI 无头调的是**同一个动作、同一个入参**。界面这边自己再拼一次
+        // 打包逻辑，就等于把一个动作实现了两遍 —— 那正是这套东西要消灭的分叉。
+        zip: $("zipPack").checked,
       });
 
       const readImage = (file) => new Promise((resolve, reject) => {
@@ -518,6 +534,18 @@
             item.append(img, label);
             return item;
           }));
+          if (result.zip) {
+            // 直接给一条能点的下载链，别只说「已进收件箱」——
+            // 用户要的是拿到文件，不是知道它在某个列表里。
+            const row = document.createElement("div");
+            row.className = "ziprow";
+            const a = document.createElement("a");
+            a.href = `/artifact/${encodeURIComponent(result.zip.id)}`;
+            a.setAttribute("download", `九宫格-${values().rows}x${values().cols}.zip`);
+            a.textContent = `下载 zip（${Math.max(1, Math.round(result.zip.bytes / 1024))} KB）`;
+            row.append(a);
+            $("results").append(row);
+          }
           $("results").hidden = false;
           setStatus(`${result.message}，结果已进入收件箱。`, "good");
         } catch (e) {

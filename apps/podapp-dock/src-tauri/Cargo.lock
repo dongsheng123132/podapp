@@ -2604,6 +2604,7 @@ dependencies = [
  "podapp-qr",
  "podapp-runtime",
  "podapp-win",
+ "podapp-zip",
  "serde",
  "serde_json",
  "tauri",
@@ -2638,6 +2639,14 @@ name = "podapp-win"
 version = "0.1.0"
 dependencies = [
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "podapp-zip"
+version = "0.1.0"
+dependencies = [
+ "podapp-runtime",
+ "serde_json",
 ]
 
 [[package]]

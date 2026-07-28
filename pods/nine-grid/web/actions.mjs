@@ -69,13 +69,32 @@ export default {
       await pod.ui.progress(Math.round((out.length / plan.length) * 100), `切第 ${out.length} 张`);
     }
 
+    let zip = null;
+    if (input.zip) {
+      // 打包走**宿主动作**，不是桥上的能力：桥上的东西对所有程序舱一律开放，
+      // 而打包要读别的产物，得在 permissions.host_actions 里申报，装包时列给用户看。
+      //
+      // 名字补零到两位。切到 10 行以上时，`1-1 / 10-1` 在资源管理器里会排在
+      // `2-1` 前面 —— 解压出来顺序全乱，而这一步没人会去检查。
+      const pad = (n) => String(n).padStart(2, "0");
+      const packed = await pod.action("host.zip.pack", {
+        artifacts: out.map((t) => t.artifact.id),
+        names: out.map((t) => `${pad(t.row)}-${pad(t.col)}.png`),
+        label: `九宫格切图 ${rows}×${cols}`,
+      });
+      zip = packed.artifact;
+    }
+
     return {
       ok: true,
       count: out.length,
       source: { w: src.w, h: src.h },
       cell: { w: plan[0].w, h: plan[0].h },
       tiles: out,
-      message: `切成 ${rows}×${cols} 共 ${out.length} 张，每张约 ${plan[0].w}×${plan[0].h}`,
+      zip,
+      message:
+        `切成 ${rows}×${cols} 共 ${out.length} 张，每张约 ${plan[0].w}×${plan[0].h}` +
+        (zip ? `，已打包成一个 zip` : ""),
     };
   },
 };

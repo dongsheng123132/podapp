@@ -3,7 +3,7 @@
   "application": {
     "id": "org.podapp.image.nine-grid",
     "name": "九宫格切图",
-    "version": "0.2.0"
+    "version": "0.3.0"
   },
   "surfaces": [
     { "id": "pod", "kind": "gui", "required_for_parity": true },
@@ -31,6 +31,10 @@
             "minimum": 0,
             "maximum": 512,
             "description": "格子之间要丢掉的缝宽（像素）。AI 画的九宫格常自带白边，用它切掉。"
+          },
+          "zip": {
+            "type": "boolean",
+            "description": "顺带把这些切片打成一个 zip 一并交付。切片本身照常单独交付，zip 是额外多的一件。"
           }
         }
       },
@@ -39,7 +43,11 @@
         "properties": {
           "count": { "type": "integer" },
           "cell": { "type": "object" },
-          "tiles": { "type": "array" }
+          "tiles": { "type": "array" },
+          "zip": {
+            "type": ["object", "null"],
+            "description": "只有传了 zip:true 才不是 null。是产物引用，不是压缩包本身。"
+          }
         }
       },
       "effects": {

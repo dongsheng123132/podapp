@@ -33,6 +33,9 @@ impl HostBridge for DockHost {
         if id.starts_with("host.codex.") {
             return podapp_codex::host_action(id, input);
         }
+        if id.starts_with("host.zip.") {
+            return podapp_zip::host_action(id, input);
+        }
         Err(format!("capability_unavailable: 浮舱没有宿主动作 {id}"))
     }
 }

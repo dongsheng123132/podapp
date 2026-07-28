@@ -1,0 +1,14 @@
+[package]
+name = "podapp-zip"
+version = "0.1.0"
+description = "打包能力 —— 以宿主动作 host.zip.pack 提供，不进核心运行时"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+podapp-runtime = { path = "../podapp-runtime" }
+serde_json.workspace = true
+# 刻意**不引压缩库**。ZIP 的存储模式只要 CRC32 和几个定长头，而进来的都是
+# 已经压过的 PNG/JPG，再 deflate 一遍省不到 1%。真要压文本那天再加，
+# 那时是多一个 method，不是重写。

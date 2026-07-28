@@ -4,7 +4,7 @@
     "id": "org.podapp.image.nine-grid",
     "slug": "nine-grid",
     "name": "九宫格切图",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "summary": "把一张图切成九张，尺寸严丝合缝",
     "description": "AI 常一次画出九宫格拼在一起的图，但发朋友圈 / 小红书要的是九张独立图片。这个程序舱按行列均分切开，可以指定要丢掉的缝宽，切完每张单独交付。不压缩、不重编码尺寸，切多大就是多大。",
     "author": "PodApp",
@@ -42,7 +42,7 @@
     },
     "fs": { "app_data": true, "save_dialog": false, "open_dialog": false },
     "net": { "allow": [] },
-    "host_actions": []
+    "host_actions": ["host.zip.pack"]
   },
   "market": {
     "category": "image",

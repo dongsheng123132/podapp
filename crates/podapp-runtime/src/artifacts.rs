@@ -109,6 +109,10 @@ fn sniff_ext(b: &[u8]) -> &'static str {
         "pdf"
     } else if b.len() > 3 && &b[..3] == b"GIF" {
         "gif"
+    } else if b.len() > 4 && &b[..2] == b"PK" && matches!(b[2..4], [3, 4] | [5, 6] | [7, 8]) {
+        // 三种签名分别是「普通条目 / 空包 / 分卷」。认不出 zip 会让打包产物存成
+        // `.bin`，用户下下来双击打不开 —— 后缀是这里唯一决定的。
+        "zip"
     } else {
         "bin"
     }
@@ -150,7 +154,11 @@ fn b64_decode(s: &str) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
-/// 收一个产物。返回给调用方的引用（不含像素）。
+/// 收一个产物（data URL 或裸 base64）。返回给调用方的引用（不含像素）。
+///
+/// 这是**程序舱那一侧**的入口：桥上传过来的本来就是字符串。
+/// 宿主自己已经有字节的时候走 [`emit_bytes`]，别为了迁就这个签名去 base64 绕一圈 ——
+/// 一个 60MB 的包编码成 base64 是 80MB 的临时字符串，纯属白花。
 pub fn emit(
     source: &str,
     action: Option<&str>,
@@ -158,21 +166,33 @@ pub fn emit(
     data: &str,
     message: Option<&str>,
 ) -> Result<Artifact, String> {
-    let (bytes, ext) = decode_payload(data)?;
+    let (bytes, _) = decode_payload(data)?;
+    emit_bytes(source, action, kind, &bytes, message)
+}
+
+/// 收一个产物，直接给字节。后缀按内容嗅探，不信调用方说自己是什么。
+pub fn emit_bytes(
+    source: &str,
+    action: Option<&str>,
+    kind: &str,
+    bytes: &[u8],
+    message: Option<&str>,
+) -> Result<Artifact, String> {
     if bytes.is_empty() {
         return Err("产物是空的".into());
     }
     if bytes.len() > 64 * 1024 * 1024 {
         return Err("产物过大（上限 64MB）".into());
     }
+    let ext = sniff_ext(bytes);
     std::fs::create_dir_all(dir()).map_err(|e| e.to_string())?;
 
     let ts = now_ms();
     let id = format!("art_{ts:x}_{:04x}", bytes.len() as u16);
     let file = format!("{id}.{ext}");
-    std::fs::write(dir().join(&file), &bytes).map_err(|e| e.to_string())?;
+    std::fs::write(dir().join(&file), bytes).map_err(|e| e.to_string())?;
 
-    let (w, h) = png_size(&bytes)
+    let (w, h) = png_size(bytes)
         .map(|(a, b)| (Some(a), Some(b)))
         .unwrap_or((None, None));
     let a = Artifact {
