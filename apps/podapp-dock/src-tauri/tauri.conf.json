@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "PodApp",
+  "productName": "泊舟 AI 小程序",
   "version": "0.1.0",
   "identifier": "org.podapp.dock",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "dock",
-        "title": "PodApp",
+        "title": "泊舟 AI 小程序",
         "width": 380,
         "height": 800,
         "decorations": false,
@@ -33,6 +33,9 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "resources": {
+      "../../../pods": "pods"
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -42,8 +45,8 @@
     "fileAssociations": [
       {
         "ext": ["pod"],
-        "name": "PodApp 程序舱",
-        "description": "一个可安装、可分享的确定性动作包",
+        "name": "泊舟 AI 小程序包",
+        "description": "可安装、可分享，也能由 AI 直接调用的小程序包",
         "role": "Editor"
       }
     ]

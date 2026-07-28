@@ -10,6 +10,7 @@ mod protocol;
 
 use podapp_runtime::{Capabilities, HostProfile, PodInfo};
 use serde_json::Value;
+use std::collections::HashSet;
 use tauri::{Emitter, Manager};
 #[cfg(desktop)]
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
@@ -30,6 +31,54 @@ pub struct DockStatus {
 /// 「界面里能调的动词」和「无头能调的动词」会悄悄不一样，而那正是 parity 要防的。
 fn capabilities() -> Capabilities {
     Capabilities::builtin().with(podapp_qr::QrCapability)
+}
+
+/// 首次启动装入随应用发布的官方小程序。
+///
+/// 只补缺失项，不覆盖用户已安装的同 ID 小程序。`pods/` 是源码唯一真相源，
+/// Tauri 构建时把它映射到资源目录；开发态则回退到仓库里的原目录。
+fn install_missing_bundled_pods(app: &tauri::AppHandle) -> Vec<String> {
+    let release_root = app.path().resource_dir().ok().map(|p| p.join("pods"));
+    let dev_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../pods");
+    let root = release_root.filter(|p| p.is_dir()).unwrap_or(dev_root);
+    let mut installed: HashSet<String> = podapp_runtime::registry::list()
+        .into_iter()
+        .map(|p| p.id)
+        .collect();
+    let mut errors = Vec::new();
+
+    let mut dirs: Vec<_> = match std::fs::read_dir(&root) {
+        Ok(entries) => entries
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.is_dir())
+            .collect(),
+        Err(e) => {
+            errors.push(format!("读不到内置小程序目录 {}: {e}", root.display()));
+            return errors;
+        }
+    };
+    dirs.sort();
+
+    for dir in dirs {
+        let manifest = match podapp_runtime::manifest::load_dir(&dir) {
+            Ok((manifest, _)) => manifest,
+            Err(e) => {
+                errors.push(format!("内置小程序 {} 无效: {e}", dir.display()));
+                continue;
+            }
+        };
+        let id = manifest.ident.id.clone();
+        if installed.contains(&id) {
+            continue;
+        }
+        if let Err(e) = podapp_runtime::install::install_from_path(&dir, "bundled") {
+            errors.push(format!("内置小程序 {id} 安装失败: {e}"));
+        } else {
+            installed.insert(id);
+        }
+    }
+    errors
 }
 
 #[tauri::command]
@@ -134,6 +183,10 @@ pub fn run() {
         ])
         .setup(|app| {
             let handle = app.handle().clone();
+
+            for error in install_missing_bundled_pods(&handle) {
+                eprintln!("[dock] {error}");
+            }
 
             // 跟随线程要一直活着 —— watcher 一 drop 就停了，浮舱会静止在最后一个位置，
             // 而那看起来像「卡住了」而不是「跟随坏了」。挂到 app state 上随进程走。

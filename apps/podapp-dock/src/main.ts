@@ -33,7 +33,7 @@ function render(s: DockStatus) {
   boat.hidden = s.expanded;
   panel.hidden = !s.expanded;
 
-  attach.textContent = s.attached ? `已吸附 · ${s.host_title ?? ""}` : "未吸附（Codex 没开着）";
+  attach.textContent = s.attached ? `已吸附 · ${s.host_title ?? ""}` : "独立模式";
   attach.classList.toggle("on", s.attached);
   caps.textContent = `能力：${s.capabilities.join(" · ")}`;
 
@@ -60,7 +60,7 @@ function render(s: DockStatus) {
   if (s.pods.length === 0) {
     const li = document.createElement("li");
     li.className = "empty";
-    li.textContent = "还没有程序舱。让 Codex 写一个，或把 .pod 拖进来。";
+    li.textContent = "还没有 AI 小程序。把 .pod 小程序包拖进来即可安装。";
     podList.append(li);
   }
 }
@@ -71,7 +71,7 @@ function warn(e: unknown) {
   drop.classList.add("bad");
   setTimeout(() => {
     drop.classList.remove("bad");
-    drop.textContent = "把 Codex 生成的图 / 网页 / .pod 拖到这里";
+    drop.textContent = "把 AI 生成的图 / 网页 / .pod 小程序包拖到这里";
   }, 4000);
 }
 
