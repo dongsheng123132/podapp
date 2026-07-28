@@ -427,11 +427,17 @@ fn dock_artifacts() -> Vec<podapp_runtime::artifacts::Artifact> {
 ///
 /// 双击 `.pod` 时 Windows 就是把路径当参数拉起我们。**只认 `.pod` 结尾的存在的文件** ——
 /// 把任意参数都当包去装，等于给「谁能让 PodApp 装东西」开了一个没上锁的门。
-fn pods_from_argv() -> Vec<String> {
-    std::env::args()
+/// 拆出纯函数是为了能测 —— 直接读 `std::env::args()` 的版本没法在测试里喂参数，
+/// 而「哪些参数会被当成包装上」正是这里最该被钉住的一条。
+fn pods_from_args<I: IntoIterator<Item = String>>(args: I) -> Vec<String> {
+    args.into_iter()
         .skip(1)
         .filter(|a| a.to_ascii_lowercase().ends_with(".pod") && std::path::Path::new(a).is_file())
         .collect()
+}
+
+fn pods_from_argv() -> Vec<String> {
+    pods_from_args(std::env::args())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -516,11 +522,26 @@ pub fn run() {
                 let _ = win.show();
             }
 
-            // 双击 .pod 拉起我们时，把它装上并展开给用户看结果
+            // 双击 .pod 拉起我们时，把它装上并展开给用户看结果。
+            //
+            // **装这件事必须在这里、用运行时直接做，不能发事件交给界面去装。**
+            // `setup` 跑在 webview 加载之前，`emit` 是发完即忘 —— 那一刻界面还没注册监听，
+            // 事件当场丢掉，于是浮舱正常弹出、包却一个都没装上，看起来像「什么也没发生」。
+            // 这正是「业务动作只实现一次、装在面之下」要挡的分叉：装包是业务动作，
+            // 走的必须是 `dock_install` 同一个函数，而不是界面事件总线。
+            // 装完不必额外通知界面：前端起来后自己会 refresh 一次，列表就是新的。
             let pending = pods_from_argv();
             if !pending.is_empty() {
+                for path in &pending {
+                    match podapp_runtime::install::install_from_path(
+                        std::path::Path::new(path),
+                        "argv",
+                    ) {
+                        Ok(info) => eprintln!("[dock] 已装 {} v{}", info.id, info.version),
+                        Err(e) => eprintln!("[dock] 装 {path} 失败：{e}"),
+                    }
+                }
                 dock::set_expanded(&handle, true);
-                let _ = handle.emit("dock://dropped", pending);
             }
             Ok(())
         })
@@ -566,4 +587,74 @@ pub(crate) fn rpc_with_dock_capabilities(
         verb,
         args,
     )
+}
+
+#[cfg(test)]
+mod argv_tests {
+    use super::pods_from_args;
+
+    fn scratch(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("podapp-argv-{tag}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn touch(dir: &std::path::Path, name: &str) -> String {
+        let p = dir.join(name);
+        std::fs::write(&p, b"not a real package, only needs to exist").unwrap();
+        p.display().to_string()
+    }
+
+    /// 双击 `.pod` 是「谁能让 PodApp 装东西」的入口，所以这道过滤是**安全闸**，不是便利：
+    /// 只有真实存在的 `.pod` 文件能过，别的参数一律不当包。
+    #[test]
+    fn only_existing_pod_files_are_installed() {
+        let dir = scratch("only-existing");
+        let real = touch(&dir, "real.pod");
+        let not_a_pod = touch(&dir, "readme.txt");
+        let looks_like_pod = touch(&dir, "trap.pod.txt");
+        let missing = dir.join("ghost.pod").display().to_string();
+
+        let got = pods_from_args(vec![
+            "podapp-dock.exe".into(),
+            real.clone(),
+            not_a_pod,
+            looks_like_pod,
+            missing,
+            "--flag".into(),
+            String::new(),
+        ]);
+
+        assert_eq!(got, vec![real]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// argv[0] 是自己的可执行文件路径。要是有人把 exe 改名成 `x.pod`，
+    /// 跳过第一个参数这件事就从「习惯」变成「必须」—— 否则浮舱会去装自己。
+    #[test]
+    fn own_executable_path_is_never_installed() {
+        let dir = scratch("argv0");
+        let self_path = touch(&dir, "podapp-dock.pod");
+
+        assert!(pods_from_args(vec![self_path]).is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Windows 的文件名大小写不敏感，`.POD` 和 `.pod` 是同一个东西。
+    #[test]
+    fn extension_match_ignores_case() {
+        let dir = scratch("case");
+        let shouty = touch(&dir, "LOUD.POD");
+
+        let got = pods_from_args(vec!["podapp-dock.exe".into(), shouty.clone()]);
+        assert_eq!(got, vec![shouty]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// 不带参数直接启动是最常见的用法，这时一个包都不该被装。
+    #[test]
+    fn bare_launch_installs_nothing() {
+        assert!(pods_from_args(vec!["podapp-dock.exe".to_string()]).is_empty());
+    }
 }
