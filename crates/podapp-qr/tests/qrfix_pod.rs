@@ -10,14 +10,18 @@ use serde_json::{json, Value};
 static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 fn repo_root() -> std::path::PathBuf {
-    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize().unwrap()
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .unwrap()
 }
 
 fn have_node() -> bool {
     let exe = if cfg!(windows) { "node.exe" } else { "node" };
     std::env::var("PATH").ok().is_some_and(|p| {
         let sep = if cfg!(windows) { ';' } else { ':' };
-        p.split(sep).any(|d| !d.is_empty() && std::path::Path::new(d).join(exe).exists())
+        p.split(sep)
+            .any(|d| !d.is_empty() && std::path::Path::new(d).join(exe).exists())
     })
 }
 
@@ -78,7 +82,10 @@ fn a_pasted_code_is_actually_scannable() {
         // 这一条是整个程序舱存在的理由：成品**真的**扫得出来，而且内容没错
         assert_eq!(out["scanned_text"], url);
         assert!(std::path::Path::new(out["artifact"]["path"].as_str().unwrap()).exists());
-        assert!(!out.to_string().contains("iVBORw0"), "返回值里混进了 PNG base64");
+        assert!(
+            !out.to_string().contains("iVBORw0"),
+            "返回值里混进了 PNG base64"
+        );
     });
 }
 

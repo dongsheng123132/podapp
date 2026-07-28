@@ -17,8 +17,9 @@ const PODAPP_DOCK: HostApp = HostApp {
 fn verify() -> i32 {
     // 用 find_windows_of 而不是 find_host_window：浮舱收起时只有 64px 宽，
     // 会被「像个主窗口」那把尺子筛掉。挑最大的那个（Tauri 可能另有隐藏辅助窗）。
-    let Some(dock) =
-        podapp_win::find_windows_of(&PODAPP_DOCK).into_iter().max_by_key(|w| w.rect.w * w.rect.h)
+    let Some(dock) = podapp_win::find_windows_of(&PODAPP_DOCK)
+        .into_iter()
+        .max_by_key(|w| w.rect.w * w.rect.h)
     else {
         println!("FAIL 浮舱没在跑 —— 先启动 podapp-dock.exe");
         return 1;
@@ -45,7 +46,14 @@ fn verify() -> i32 {
         && d(dock.rect.y, want.rect.y)
         && d(dock.rect.w, want.rect.w)
         && d(dock.rect.h, want.rect.h);
-    println!("\n{}", if ok { "PASS 浮舱停在算出来的位置" } else { "FAIL 浮舱位置和计算不符" });
+    println!(
+        "\n{}",
+        if ok {
+            "PASS 浮舱停在算出来的位置"
+        } else {
+            "FAIL 浮舱位置和计算不符"
+        }
+    );
     i32::from(!ok)
 }
 
@@ -93,20 +101,35 @@ fn main() {
             println!("主窗口：hwnd={} pid={} 标题={:?}", w.hwnd, w.pid, w.title);
             println!(
                 "位置：x={} y={} w={} h={}（右边缘 {}）",
-                w.rect.x, w.rect.y, w.rect.w, w.rect.h, w.rect.right()
+                w.rect.x,
+                w.rect.y,
+                w.rect.w,
+                w.rect.h,
+                w.rect.right()
             );
 
             let work = podapp_win::work_area(Some(w.hwnd));
-            println!("所在屏工作区：x={} y={} w={} h={}", work.x, work.y, work.w, work.h);
+            println!(
+                "所在屏工作区：x={} y={} w={} h={}",
+                work.x, work.y, work.w, work.h
+            );
 
-            let p = podapp_win::dock::place(Some(w.rect), work, true, podapp_win::dock::Metrics::platform());
+            let p = podapp_win::dock::place(
+                Some(w.rect),
+                work,
+                true,
+                podapp_win::dock::Metrics::platform(),
+            );
             let room = work.right() - w.rect.right();
             println!(
                 "\n浮舱：x={} y={} w={} h={}（{:?}）",
                 p.rect.x, p.rect.y, p.rect.w, p.rect.h, p.anchor
             );
             if p.rect.x < w.rect.right() {
-                println!("宿主右边只剩 {room}px，放不下 {}px 的浮舱 —— 压在宿主右侧上方。", p.rect.w);
+                println!(
+                    "宿主右边只剩 {room}px，放不下 {}px 的浮舱 —— 压在宿主右侧上方。",
+                    p.rect.w
+                );
             } else {
                 println!("宿主右边有 {room}px，浮舱贴在旁边，不遮挡。");
             }

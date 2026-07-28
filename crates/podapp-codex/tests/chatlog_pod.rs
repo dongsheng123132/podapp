@@ -9,13 +9,17 @@ use serde_json::{json, Value};
 static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 fn repo_root() -> std::path::PathBuf {
-    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize().unwrap()
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .unwrap()
 }
 fn have_node() -> bool {
     let exe = if cfg!(windows) { "node.exe" } else { "node" };
     std::env::var("PATH").ok().is_some_and(|p| {
         let sep = if cfg!(windows) { ';' } else { ':' };
-        p.split(sep).any(|d| !d.is_empty() && std::path::Path::new(d).join(exe).exists())
+        p.split(sep)
+            .any(|d| !d.is_empty() && std::path::Path::new(d).join(exe).exists())
     })
 }
 
@@ -78,9 +82,13 @@ fn in_sandbox(tag: &str, f: impl FnOnce()) {
 
 #[test]
 fn listing_goes_through_the_host_action_chain() {
-    if !have_node() { println!("跳过：本机没有 Node"); return; }
+    if !have_node() {
+        println!("跳过：本机没有 Node");
+        return;
+    }
     in_sandbox("list", || {
-        let out = run("app.chatlog.session.list", json!({})).unwrap_or_else(|e| panic!("失败: {e}"));
+        let out =
+            run("app.chatlog.session.list", json!({})).unwrap_or_else(|e| panic!("失败: {e}"));
         assert_eq!(out["count"], 1);
         assert_eq!(out["sessions"][0]["title"], "帮我把这张图切成九宫格");
     });
@@ -88,7 +96,10 @@ fn listing_goes_through_the_host_action_chain() {
 
 #[test]
 fn the_system_prompt_never_reaches_the_export() {
-    if !have_node() { println!("跳过：本机没有 Node"); return; }
+    if !have_node() {
+        println!("跳过：本机没有 Node");
+        return;
+    }
     in_sandbox("md", || {
         let out = run("app.chatlog.session.export", json!({ "session": "s-1" }))
             .unwrap_or_else(|e| panic!("失败: {e}"));
@@ -108,25 +119,41 @@ fn the_system_prompt_never_reaches_the_export() {
 
 #[test]
 fn html_export_is_a_single_self_contained_file() {
-    if !have_node() { println!("跳过：本机没有 Node"); return; }
+    if !have_node() {
+        println!("跳过：本机没有 Node");
+        return;
+    }
     in_sandbox("html", || {
-        let out = run("app.chatlog.session.export", json!({ "session": "s-1", "format": "html" })).unwrap();
+        let out = run(
+            "app.chatlog.session.export",
+            json!({ "session": "s-1", "format": "html" }),
+        )
+        .unwrap();
         let text = std::fs::read_to_string(out["artifact"]["path"].as_str().unwrap()).unwrap();
         assert!(text.starts_with("<!doctype html>"));
         // 导出的东西要能直接发给别人：依赖 CDN 的页面在断网时是白的
-        assert!(!text.contains("http://") && !text.contains("https://"), "HTML 里不该有外链");
+        assert!(
+            !text.contains("http://") && !text.contains("https://"),
+            "HTML 里不该有外链"
+        );
         assert!(!text.contains("系统提示词"));
     });
 }
 
 #[test]
 fn the_fallback_path_does_not_need_codex_at_all() {
-    if !have_node() { println!("跳过：本机没有 Node"); return; }
+    if !have_node() {
+        println!("跳过：本机没有 Node");
+        return;
+    }
     in_sandbox("fallback", || {
         // 把 CODEX_HOME 指到不存在的地方：上游改了目录结构时就是这个情形
         std::env::set_var("CODEX_HOME", std::env::temp_dir().join("no-codex-here-xyz"));
-        let out = run("app.chatlog.session.export", json!({ "jsonl": rollout(), "title": "手动导入" }))
-            .unwrap_or_else(|e| panic!("兜底路径也失败了: {e}"));
+        let out = run(
+            "app.chatlog.session.export",
+            json!({ "jsonl": rollout(), "title": "手动导入" }),
+        )
+        .unwrap_or_else(|e| panic!("兜底路径也失败了: {e}"));
         assert_eq!(out["count"], 2);
         assert_eq!(out["title"], "手动导入");
         let text = std::fs::read_to_string(out["artifact"]["path"].as_str().unwrap()).unwrap();
@@ -136,7 +163,10 @@ fn the_fallback_path_does_not_need_codex_at_all() {
 
 #[test]
 fn asking_for_nothing_says_what_to_give() {
-    if !have_node() { println!("跳过：本机没有 Node"); return; }
+    if !have_node() {
+        println!("跳过：本机没有 Node");
+        return;
+    }
     in_sandbox("empty", || {
         let e = run("app.chatlog.session.export", json!({})).unwrap_err();
         assert!(e.contains("session") && e.contains("jsonl"), "实际: {e}");

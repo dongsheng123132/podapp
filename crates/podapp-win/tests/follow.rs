@@ -66,7 +66,11 @@ unsafe fn pump() {
 fn moving_the_host_window_reaches_the_callback() {
     // 目标就是当前测试进程自己
     let exe = std::env::current_exe().unwrap();
-    let name = exe.file_name().unwrap().to_string_lossy().to_ascii_lowercase();
+    let name = exe
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .to_ascii_lowercase();
     let leaked_name: &'static str = Box::leak(name.into_boxed_str());
     let app = HostApp {
         label: "自造测试窗口",
@@ -79,7 +83,12 @@ fn moving_the_host_window_reaches_the_callback() {
     unsafe { pump() };
 
     let (tx, rx) = mpsc::channel::<Option<Rect>>();
-    let _watcher = watch(app, Box::new(move |w| { let _ = tx.send(w.map(|w| w.rect)); }));
+    let _watcher = watch(
+        app,
+        Box::new(move |w| {
+            let _ = tx.send(w.map(|w| w.rect));
+        }),
+    );
 
     // 等一个满足条件的上报。**边等边抽消息** —— 窗口在本线程上，一路阻塞地干等
     // 就是在制造跨线程死锁（跟随线程若要问这个窗口点什么，只能等我们抽消息）。
@@ -103,10 +112,21 @@ fn moving_the_host_window_reaches_the_callback() {
     for i in 1..=3 {
         let (nx, ny) = (140 + i * 60, 120 + i * 40);
         unsafe {
-            SetWindowPos(hwnd, std::ptr::null_mut(), nx, ny, 600, 400, SWP_NOZORDER | SWP_NOACTIVATE);
+            SetWindowPos(
+                hwnd,
+                std::ptr::null_mut(),
+                nx,
+                ny,
+                600,
+                400,
+                SWP_NOZORDER | SWP_NOACTIVATE,
+            );
             pump();
         }
-        let moved = wait_for(&format!("第 {i} 次移动后的位置变化（上次 {last:?}）"), &|r| r != last);
+        let moved = wait_for(
+            &format!("第 {i} 次移动后的位置变化（上次 {last:?}）"),
+            &|r| r != last,
+        );
 
         // 刻意**不**断言 `moved == (nx, ny)`。实测这台机器上设 (200,160) 报回 (259,200)：
         // 1.25 倍 DPI 虚拟化，外加 x 方向 9px 的 DWM 不可见边框（y 方向没有）。
@@ -115,10 +135,18 @@ fn moving_the_host_window_reaches_the_callback() {
         //
         // 真正要证的是两件事：上报的位置**就是这个窗口此刻的真实位置**，
         // 而且它确实跟着我们的移动走了。
-        let truth = refresh(&HostWindow { hwnd: hwnd as isize, pid: 0, title: String::new(), rect: moved })
-            .expect("窗口还在，该刷得出位置");
+        let truth = refresh(&HostWindow {
+            hwnd: hwnd as isize,
+            pid: 0,
+            title: String::new(),
+            rect: moved,
+        })
+        .expect("窗口还在，该刷得出位置");
         assert_eq!(moved, truth, "第 {i} 次上报的位置和窗口真实位置对不上");
-        assert!(moved.x > last.x && moved.y > last.y, "第 {i} 次：往右下移动了，上报却没跟着走");
+        assert!(
+            moved.x > last.x && moved.y > last.y,
+            "第 {i} 次：往右下移动了，上报却没跟着走"
+        );
         last = moved;
     }
 

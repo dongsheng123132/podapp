@@ -287,7 +287,10 @@ mod tests {
         let js = script();
         assert!(js.contains("window.pod = bridge"), "规范名");
         assert!(
-            js.contains(&format!("window.{} = bridge", crate::profile().bridge_global)),
+            js.contains(&format!(
+                "window.{} = bridge",
+                crate::profile().bridge_global
+            )),
             "品牌别名"
         );
         // 宿主注册的能力（qr.* 之类）要够得着。没有这层透传，能力注册表就只有一半：
@@ -308,7 +311,10 @@ mod tests {
     fn runner_gives_actions_module_both_names() {
         assert!(RUNNER_JS.contains("pod: bridge"));
         assert!(RUNNER_JS.contains("uking: bridge"));
-        assert!(RUNNER_JS.contains("new Proxy(api"), "无头那条路也要能调宿主注册的能力");
+        assert!(
+            RUNNER_JS.contains("new Proxy(api"),
+            "无头那条路也要能调宿主注册的能力"
+        );
         assert!(RUNNER_JS.contains("\\x01"), "行协议前缀不能丢");
     }
 }

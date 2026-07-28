@@ -69,11 +69,10 @@ fn scan(src: &Value, rect: &Value) -> Result<Value, String> {
         None => img,
     };
 
-    let mut prepared = rqrr::PreparedImage::prepare_from_greyscale(
-        img.w as usize,
-        img.h as usize,
-        |x, y| luma_at(&img, x, y),
-    );
+    let mut prepared =
+        rqrr::PreparedImage::prepare_from_greyscale(img.w as usize, img.h as usize, |x, y| {
+            luma_at(&img, x, y)
+        });
     let mut found = vec![];
     for grid in prepared.detect_grids() {
         // 单个码解不出来不该让整次扫描失败 —— 图上可能有个装饰性的假码
@@ -130,7 +129,11 @@ fn encode(text: &Value, opts: &Value) -> Result<Value, String> {
             }
         }
     }
-    let img = Img { w: out_side as u32, h: out_side as u32, px };
+    let img = Img {
+        w: out_side as u32,
+        h: out_side as u32,
+        px,
+    };
     Ok(json!(format!(
         "data:image/png;base64,{}",
         b64(&image::encode_png(&img))
@@ -191,7 +194,11 @@ mod tests {
     fn dispatch(verb: &str, args: Value) -> Result<Value, String> {
         let caps = Capabilities::builtin().with(QrCapability);
         let host = HeadlessHost::new();
-        let ctx = CapCtx { pod_id: "test", host: &host, execution_id: "t" };
+        let ctx = CapCtx {
+            pod_id: "test",
+            host: &host,
+            execution_id: "t",
+        };
         caps.dispatch(&ctx, verb, &args)
     }
 
@@ -226,7 +233,11 @@ mod tests {
     #[test]
     fn a_blank_image_finds_nothing_rather_than_erroring() {
         // 图上没码是正常情况（用户还没贴），不是错误 —— 报错会让界面弹一个吓人的框
-        let blank = Img { w: 200, h: 200, px: vec![255u8; 200 * 200 * 4] };
+        let blank = Img {
+            w: 200,
+            h: 200,
+            px: vec![255u8; 200 * 200 * 4],
+        };
         let id = image::put_img(blank);
         let r = dispatch("qr.scan", json!([id, null])).unwrap();
         assert_eq!(r["count"], 0);
@@ -272,7 +283,11 @@ mod tests {
         // 「可插拔」的另一半：不装就没有，而且报错是明确的，不是静默失败
         let caps = Capabilities::builtin();
         let host = HeadlessHost::new();
-        let ctx = CapCtx { pod_id: "test", host: &host, execution_id: "t" };
+        let ctx = CapCtx {
+            pod_id: "test",
+            host: &host,
+            execution_id: "t",
+        };
         let e = caps.dispatch(&ctx, "qr.scan", &json!([])).unwrap_err();
         assert!(e.starts_with("unknown_capability"), "实际: {e}");
     }

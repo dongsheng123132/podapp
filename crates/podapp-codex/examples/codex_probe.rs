@@ -7,7 +7,11 @@ fn main() {
     let no_title = all.iter().filter(|s| s.title.starts_with('(')).count();
     println!("  其中 0 轮对话的: {empty}，取不到标题的: {no_title}");
     if let Some(s) = all.first() {
-        println!("最新一个: 轮数={} 标题长度={} 字", s.turns, s.title.chars().count());
+        println!(
+            "最新一个: 轮数={} 标题长度={} 字",
+            s.turns,
+            s.title.chars().count()
+        );
         match podapp_codex::read_session(&s.id) {
             Ok(v) => println!("  读取成功，消息 {} 条", v["count"]),
             Err(e) => println!("  读取失败: {e}"),

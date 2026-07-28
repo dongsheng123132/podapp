@@ -47,11 +47,7 @@ pub fn tool_name(action_id: &str) -> String {
 pub fn tools() -> Vec<Value> {
     podapp_runtime::manifest::action_specs()
         .into_iter()
-        .filter(|a| {
-            a.bindings.is_none()
-                || a.input_schema.is_some()
-                || !a.title.is_empty()
-        })
+        .filter(|a| a.bindings.is_none() || a.input_schema.is_some() || !a.title.is_empty())
         .map(|a| {
             let effect_note = match a.effect.as_str() {
                 "read" => "Read-only; changes nothing.",
@@ -85,7 +81,10 @@ pub fn call_tool(params: &Value, caps: &Capabilities) -> Result<Value, (i64, Str
         .find(|a| a.id == name || tool_name(&a.id) == name)
         .ok_or((-32602, format!("没有这个工具: {name}")))?;
 
-    let input = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
+    let input = params
+        .get("arguments")
+        .cloned()
+        .unwrap_or_else(|| json!({}));
     let inv = Invocation::new(&spec.id, input);
 
     // 失败走 MCP 的 isError 而不是 JSON-RPC 的 error：**工具执行失败不是协议错误**。
@@ -164,7 +163,10 @@ mod tests {
 
     #[test]
     fn tool_names_avoid_dots_but_keep_the_real_id_discoverable() {
-        assert_eq!(tool_name("app.nine-grid.image.split"), "app_nine-grid_image_split");
+        assert_eq!(
+            tool_name("app.nine-grid.image.split"),
+            "app_nine-grid_image_split"
+        );
         // 连字符要留着 —— 它在 slug 里是合法字符，换掉会让两个不同的 slug 撞名
         assert!(tool_name("app.nine-grid.image.split").contains('-'));
     }
@@ -178,7 +180,11 @@ mod tests {
 
     #[test]
     fn initialize_reports_tools_capability() {
-        let r = handle(&json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize" }), &caps()).unwrap();
+        let r = handle(
+            &json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize" }),
+            &caps(),
+        )
+        .unwrap();
         assert_eq!(r["id"], 1);
         assert_eq!(r["result"]["protocolVersion"], PROTOCOL_VERSION);
         assert!(r["result"]["capabilities"]["tools"].is_object());
@@ -187,7 +193,11 @@ mod tests {
 
     #[test]
     fn an_unknown_method_is_a_protocol_error() {
-        let r = handle(&json!({ "jsonrpc": "2.0", "id": 9, "method": "wat" }), &caps()).unwrap();
+        let r = handle(
+            &json!({ "jsonrpc": "2.0", "id": 9, "method": "wat" }),
+            &caps(),
+        )
+        .unwrap();
         assert_eq!(r["error"]["code"], -32601);
     }
 

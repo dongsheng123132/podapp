@@ -106,14 +106,37 @@ mod tests {
     #[test]
     fn tiny_helper_windows_are_not_mistaken_for_the_main_window() {
         // Chromium 会开一堆 1×1 的隐藏窗口；贴到那上面浮舱就飞了
-        assert!(!Rect { x: 0, y: 0, w: 1, h: 1 }.looks_like_a_real_window());
-        assert!(!Rect { x: 0, y: 0, w: 800, h: 12 }.looks_like_a_real_window());
-        assert!(Rect { x: 100, y: 100, w: 1200, h: 800 }.looks_like_a_real_window());
+        assert!(!Rect {
+            x: 0,
+            y: 0,
+            w: 1,
+            h: 1
+        }
+        .looks_like_a_real_window());
+        assert!(!Rect {
+            x: 0,
+            y: 0,
+            w: 800,
+            h: 12
+        }
+        .looks_like_a_real_window());
+        assert!(Rect {
+            x: 100,
+            y: 100,
+            w: 1200,
+            h: 800
+        }
+        .looks_like_a_real_window());
     }
 
     #[test]
     fn rect_edges() {
-        let r = Rect { x: 10, y: 20, w: 100, h: 50 };
+        let r = Rect {
+            x: 10,
+            y: 20,
+            w: 100,
+            h: 50,
+        };
         assert_eq!(r.right(), 110);
         assert_eq!(r.bottom(), 70);
     }

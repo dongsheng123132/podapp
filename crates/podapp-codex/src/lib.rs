@@ -56,7 +56,9 @@ impl SessionInfo {
 }
 
 fn read_lines(p: &Path) -> Vec<Value> {
-    let Ok(text) = std::fs::read_to_string(p) else { return vec![] };
+    let Ok(text) = std::fs::read_to_string(p) else {
+        return vec![];
+    };
     text.lines()
         .filter(|l| !l.trim().is_empty())
         // 坏行跳过而不是整份放弃：会话文件可能正被 Codex 追写，最后一行可能是半条
@@ -97,7 +99,9 @@ fn message_of(rec: &Value) -> Option<(String, String)> {
 
 fn summarize(path: &Path) -> Option<SessionInfo> {
     let lines = read_lines(path);
-    let meta = lines.iter().find(|r| r.get("type").and_then(|t| t.as_str()) == Some("session_meta"))?;
+    let meta = lines
+        .iter()
+        .find(|r| r.get("type").and_then(|t| t.as_str()) == Some("session_meta"))?;
     let p = meta.get("payload")?;
 
     let msgs: Vec<(String, String)> = lines.iter().filter_map(message_of).collect();
@@ -111,8 +115,17 @@ fn summarize(path: &Path) -> Option<SessionInfo> {
         .unwrap_or_else(|| "(没有用户消息)".into());
 
     Some(SessionInfo {
-        id: p.get("session_id").or_else(|| p.get("id")).and_then(|v| v.as_str()).unwrap_or("").into(),
-        started: p.get("timestamp").and_then(|v| v.as_str()).unwrap_or("").into(),
+        id: p
+            .get("session_id")
+            .or_else(|| p.get("id"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .into(),
+        started: p
+            .get("timestamp")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .into(),
         cwd: p.get("cwd").and_then(|v| v.as_str()).unwrap_or("").into(),
         title,
         path: path.to_path_buf(),
@@ -130,14 +143,20 @@ pub fn list_sessions(limit: usize) -> Vec<SessionInfo> {
     // 文件名里带 ISO 时间戳，字典序即时间序 —— 不用逐个读文件就能排
     files.sort();
     files.reverse();
-    files.iter().take(limit).filter_map(|p| summarize(p)).collect()
+    files
+        .iter()
+        .take(limit)
+        .filter_map(|p| summarize(p))
+        .collect()
 }
 
 fn collect_jsonl(dir: &Path, out: &mut Vec<PathBuf>, depth: usize) {
     if depth > 4 {
         return;
     }
-    let Ok(rd) = std::fs::read_dir(dir) else { return };
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return;
+    };
     for e in rd.flatten() {
         let p = e.path();
         if p.is_dir() {
@@ -212,8 +231,15 @@ pub fn read_session(path_or_id: &str) -> Result<Value, String> {
 pub fn host_action(id: &str, input: Value) -> Result<Value, String> {
     match id {
         "host.codex.session.list" => {
-            let limit = input.get("limit").and_then(|v| v.as_u64()).unwrap_or(50).clamp(1, 500);
-            let items: Vec<Value> = list_sessions(limit as usize).iter().map(|s| s.to_json()).collect();
+            let limit = input
+                .get("limit")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(50)
+                .clamp(1, 500);
+            let items: Vec<Value> = list_sessions(limit as usize)
+                .iter()
+                .map(|s| s.to_json())
+                .collect();
             Ok(json!({ "count": items.len(), "sessions": items }))
         }
         "host.codex.session.read" => {
@@ -259,8 +285,11 @@ mod tests {
             // 认不出的类型：跳过，别报错
             json!({ "type": "world_state", "payload": { "whatever": 1 } }),
         ];
-        let body: String =
-            lines.iter().map(|l| l.to_string() + "\n").collect::<Vec<_>>().concat()
+        let body: String = lines
+            .iter()
+            .map(|l| l.to_string() + "\n")
+            .collect::<Vec<_>>()
+            .concat()
             + "{ 这是半条被截断的行\n"; // 追写中的文件常见
         std::fs::write(day.join("rollout-2026-07-27T16-42-12-abc-123.jsonl"), body).unwrap();
 
@@ -285,7 +314,8 @@ mod tests {
     fn the_system_prompt_never_leaves_the_machine() {
         // 系统提示词又长又不是用户的对话，导进文档既是噪音又可能带出不该外传的内容
         sandbox(|_| {
-            let v = host_action("host.codex.session.read", json!({ "session": "abc-123" })).unwrap();
+            let v =
+                host_action("host.codex.session.read", json!({ "session": "abc-123" })).unwrap();
             let s = v.to_string();
             assert!(!s.contains("系统提示词"), "developer 角色泄漏了");
             assert_eq!(v["count"], 2);
@@ -300,7 +330,8 @@ mod tests {
     fn a_half_written_line_does_not_lose_the_whole_session() {
         // 会话文件可能正被 Codex 追写，最后一行是半条 —— 整份放弃是错的
         sandbox(|_| {
-            let v = host_action("host.codex.session.read", json!({ "session": "abc-123" })).unwrap();
+            let v =
+                host_action("host.codex.session.read", json!({ "session": "abc-123" })).unwrap();
             assert_eq!(v["count"], 2, "坏行该跳过，不该拖垮整份");
         });
     }
@@ -324,7 +355,10 @@ mod tests {
     #[test]
     fn a_missing_codex_says_what_to_do_instead() {
         let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
-        std::env::set_var("CODEX_HOME", std::env::temp_dir().join("definitely-not-codex-xyz"));
+        std::env::set_var(
+            "CODEX_HOME",
+            std::env::temp_dir().join("definitely-not-codex-xyz"),
+        );
         let e = read_session("whatever").unwrap_err();
         // 报错要给出下一步，不能只说「失败」
         assert!(e.contains("拖入") || e.contains("没装"), "实际: {e}");

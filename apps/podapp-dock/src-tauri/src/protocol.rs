@@ -70,7 +70,9 @@ pub fn handle<R: tauri::Runtime>(
             serde_json::from_slice(req.body()).unwrap_or(serde_json::Value::Null);
         let host = crate::host::DockHost;
         // 走浮舱那一份能力集 —— 界面这条路和无头那条路必须看到同样的动词
-        return json_result(crate::rpc_with_dock_capabilities(pod_id, verb, &args, &host));
+        return json_result(crate::rpc_with_dock_capabilities(
+            pod_id, verb, &args, &host,
+        ));
     }
 
     if let Some(id) = path.strip_prefix("/artifact/") {
@@ -89,10 +91,18 @@ pub fn handle<R: tauri::Runtime>(
         let is_entry = served.status == 200 && served.mime.starts_with("text/html");
         // 桥只注入 HTML 文档。注入到 js/png 上会把文件内容弄坏，
         // 而「图片打不开」根本不会让人联想到桥。
-        let body = if is_entry { bridge::inject(&served.body, pod_id) } else { served.body };
+        let body = if is_entry {
+            bridge::inject(&served.body, pod_id)
+        } else {
+            served.body
+        };
 
-        let csp = manifest::permissions(pod_id).map(|p| perms::csp_for(&p)).unwrap_or_default();
-        let mut b = Response::builder().status(served.status).header("content-type", served.mime);
+        let csp = manifest::permissions(pod_id)
+            .map(|p| perms::csp_for(&p))
+            .unwrap_or_default();
+        let mut b = Response::builder()
+            .status(served.status)
+            .header("content-type", served.mime);
         if is_entry && !csp.is_empty() {
             b = b.header("content-security-policy", csp);
         }
@@ -111,11 +121,23 @@ mod tests {
 
     #[test]
     fn pod_paths_split_correctly() {
-        assert_eq!(split_pod_path("/app/org.x.y/web/a.js", "/app/"), Some(("org.x.y", "web/a.js")));
+        assert_eq!(
+            split_pod_path("/app/org.x.y/web/a.js", "/app/"),
+            Some(("org.x.y", "web/a.js"))
+        );
         // 没有尾部路径 = 入口页
-        assert_eq!(split_pod_path("/app/org.x.y", "/app/"), Some(("org.x.y", "")));
-        assert_eq!(split_pod_path("/app/org.x.y/", "/app/"), Some(("org.x.y", "")));
-        assert_eq!(split_pod_path("/rpc/org.x.y/image.decode", "/rpc/"), Some(("org.x.y", "image.decode")));
+        assert_eq!(
+            split_pod_path("/app/org.x.y", "/app/"),
+            Some(("org.x.y", ""))
+        );
+        assert_eq!(
+            split_pod_path("/app/org.x.y/", "/app/"),
+            Some(("org.x.y", ""))
+        );
+        assert_eq!(
+            split_pod_path("/rpc/org.x.y/image.decode", "/rpc/"),
+            Some(("org.x.y", "image.decode"))
+        );
         assert_eq!(split_pod_path("/other", "/app/"), None);
     }
 
@@ -127,6 +149,9 @@ mod tests {
         assert_eq!(r.status(), 200);
         let v: serde_json::Value = serde_json::from_slice(r.body()).unwrap();
         assert_eq!(v["ok"], false);
-        assert!(v["error"].as_str().unwrap().starts_with("permission_denied"));
+        assert!(v["error"]
+            .as_str()
+            .unwrap()
+            .starts_with("permission_denied"));
     }
 }
