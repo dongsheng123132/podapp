@@ -9,6 +9,7 @@ use crate::Rect;
 /// 浮舱宽度（物理像素）。收起时只露出小船。
 pub const DOCK_WIDTH_EXPANDED: i32 = 380;
 pub const DOCK_WIDTH_COLLAPSED: i32 = 64;
+pub const DOCK_HEIGHT_COLLAPSED: i32 = 64;
 
 /// 贴在宿主右侧时留的缝。0 表示严丝合缝。
 const GAP: i32 = 0;
@@ -22,13 +23,19 @@ const GAP: i32 = 0;
 pub struct Metrics {
     pub expanded_w: i32,
     pub collapsed_w: i32,
+    pub collapsed_h: i32,
     /// 系统允许的最小窗口宽度。0 = 不设限（测试和非 Windows 用）。
     pub min_w: i32,
 }
 
 impl Default for Metrics {
     fn default() -> Self {
-        Self { expanded_w: DOCK_WIDTH_EXPANDED, collapsed_w: DOCK_WIDTH_COLLAPSED, min_w: 0 }
+        Self {
+            expanded_w: DOCK_WIDTH_EXPANDED,
+            collapsed_w: DOCK_WIDTH_COLLAPSED,
+            collapsed_h: DOCK_HEIGHT_COLLAPSED,
+            min_w: 0,
+        }
     }
 }
 
@@ -85,9 +92,14 @@ pub fn place(host: Option<Rect>, work: Rect, expanded: bool, m: Metrics) -> Plac
         x = work.x;
     }
 
-    // 高度跟随宿主，但不超出工作区；太矮的话给个下限，免得内容挤成一条
+    // 展开后高度跟随宿主；收起时必须真的是一个按钮，不能留一整条透明置顶窗口。
     let y = y.max(work.y);
-    let h = h.min(work.bottom() - y).max(120);
+    let available_h = work.bottom() - y;
+    let h = if expanded {
+        h.min(available_h).max(120)
+    } else {
+        m.collapsed_h.min(available_h).max(1)
+    };
 
     Placement { rect: Rect { x, y, w, h }, anchor }
 }
@@ -135,6 +147,15 @@ mod tests {
         assert_eq!(p.anchor, Anchor::ScreenRight);
         assert_eq!(p.rect.right(), work().right());
         assert_eq!(p.rect.w, DOCK_WIDTH_COLLAPSED);
+        assert_eq!(p.rect.h, DOCK_HEIGHT_COLLAPSED);
+    }
+
+    #[test]
+    fn collapsed_dock_is_button_height_even_when_the_host_is_tall() {
+        let host = Rect { x: 200, y: 250, w: 1800, h: 1025 };
+        let p = place(Some(host), work(), false, Metrics::default());
+        assert_eq!(p.rect.y, host.y, "收起和展开共用顶部锚点");
+        assert_eq!(p.rect.h, DOCK_HEIGHT_COLLAPSED, "收起态不能留一整条黑栏");
     }
 
     #[test]

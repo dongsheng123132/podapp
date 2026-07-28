@@ -7,8 +7,8 @@
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <!-- 收起态：只有小船。整个窗口就这么大，所以它自己就是拖动把手。 -->
-    <div id="boat" class="boat" data-tauri-drag-region title="点击展开 AI 小程序">🚤</div>
+    <!-- 收起态：小船只负责展开；展开后通过标题栏拖动。 -->
+    <button id="boat" class="boat" title="点击展开 AI 小程序" aria-label="展开 AI 小程序">🚤</button>
 
     <!-- 展开态 -->
     <section id="panel" class="panel" hidden>

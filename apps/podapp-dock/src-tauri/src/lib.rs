@@ -125,25 +125,47 @@ fn dock_run(action_id: String, input: Value) -> Result<Value, String> {
 /// **开独立窗口，不嵌 iframe。** WebView2 会拒绝跨 scheme 的 iframe
 ///（U-King 0.9.72 那次 c29590d 就栽在这上面：容器永远卡在「正在打开」）。
 /// 这不是取舍，是平台限制，第一版直接按这个形态设计。
+fn pod_webview_url(id: &str) -> Result<tauri::WebviewUrl, String> {
+    let url = format!("podapp://localhost/app/{id}/");
+    Ok(tauri::WebviewUrl::CustomProtocol(
+        url.parse().map_err(|e| format!("地址不合法: {e}"))?,
+    ))
+}
+
 #[tauri::command]
-fn dock_open_pod(app: tauri::AppHandle, id: String) -> Result<(), String> {
+async fn dock_open_pod(app: tauri::AppHandle, id: String) -> Result<(), String> {
     let info = podapp_runtime::manifest::get(&id)?;
     let label = format!("pod-{}", info.slug);
     if let Some(w) = app.get_webview_window(&label) {
         let _ = w.set_focus();
         return Ok(());
     }
-    let url = format!("podapp://localhost/app/{id}/");
     tauri::WebviewWindowBuilder::new(
         &app,
         &label,
-        tauri::WebviewUrl::External(url.parse().map_err(|e| format!("地址不合法: {e}"))?),
+        pod_webview_url(&id)?,
     )
     .title(&info.name)
     .inner_size(1000.0, 720.0)
     .build()
     .map_err(|e| format!("打开失败: {e}"))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod pod_window_tests {
+    #[test]
+    fn pod_pages_are_custom_protocol_urls() {
+        match super::pod_webview_url("org.podapp.image.nine-grid").unwrap() {
+            tauri::WebviewUrl::CustomProtocol(url) => {
+                assert_eq!(
+                    url.as_str(),
+                    "podapp://localhost/app/org.podapp.image.nine-grid/"
+                );
+            }
+            other => panic!("小程序页面不能作为外部 URL 打开: {other:?}"),
+        }
+    }
 }
 
 #[tauri::command]

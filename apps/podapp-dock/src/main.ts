@@ -22,7 +22,7 @@ type DockStatus = {
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
-const boat = $<HTMLDivElement>("boat");
+const boat = $<HTMLButtonElement>("boat");
 const panel = $<HTMLElement>("panel");
 const attach = $<HTMLSpanElement>("attach");
 const podList = $<HTMLUListElement>("pods");

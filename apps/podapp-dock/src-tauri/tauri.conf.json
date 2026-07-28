@@ -14,13 +14,13 @@
       {
         "label": "dock",
         "title": "泊舟 AI 小程序",
-        "width": 380,
-        "height": 800,
+        "width": 170,
+        "height": 64,
         "decorations": false,
         "transparent": true,
         "alwaysOnTop": true,
         "skipTaskbar": true,
-        "resizable": false,
+        "resizable": true,
         "shadow": false,
         "dragDropEnabled": true,
         "visible": false

@@ -9,6 +9,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 
 html, body {
   margin: 0;
@@ -25,9 +26,11 @@ html, body {
 .boat {
   width: 100%;
   height: 100%;
+  padding: 0;
   display: grid;
   place-items: center;
   font-size: 30px;
+  color: var(--fg);
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: 14px 0 0 14px;   /* 贴右边缘，只圆左侧两角 */

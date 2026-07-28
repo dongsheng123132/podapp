@@ -57,7 +57,7 @@ pub fn reposition(app: &AppHandle) {
     );
 }
 
-/// 展开 / 收起。只改宽度，不换边（见 `place` 的测试）。
+/// 展开 / 收起。保持顶部与停靠边不变，只切换窗口尺寸（见 `place` 的测试）。
 pub fn set_expanded(app: &AppHandle, on: bool) {
     with_state(|s| s.expanded = on);
     reposition(app);
