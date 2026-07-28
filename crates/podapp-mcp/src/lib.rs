@@ -40,11 +40,90 @@ pub fn tool_name(action_id: &str) -> String {
     action_id.replace('.', "_")
 }
 
+/// 收件箱工具的名字。**不带 `app_` 前缀**，和程序舱动作区分开 ——
+/// 它不属于任何一个程序舱，是宿主本身的能力。
+pub const INBOX_TOOL: &str = "podapp_inbox_recent";
+
+/// 「人刚才交给我什么」。
+///
+/// 其余工具都是 AI **让宿主做事**；只有这一个是反方向的：人在浮舱里标注了一张图、
+/// 切了九宫格、修了二维码，产物落进收件箱，AI 主动来取。
+///
+/// 没有这一条，闭环就断在**人身上** —— 标完得自己复制、切窗口、粘贴。
+/// 一次两次无所谓，一天二十次就没人用了。
+///
+/// 只回**引用**（id / 路径 / 那行人话），不回内容：一张 4MB 的 PNG 变成 base64
+/// 塞进工具返回值，是把对方的上下文烧掉换一个它并不需要的东西 —— 它要的是路径，
+/// 自己会去读。
+fn inbox_tool() -> Value {
+    json!({
+        "name": INBOX_TOOL,
+        "description": "List what the human most recently handed over from the PodApp dock \
+    （人刚在浮舱里产出的东西）: annotated images, split tiles, fixed QR posters, exported chats. \
+    Returns references (id, file path, human note) — never file contents; read the path yourself. \
+    Read-only; changes nothing.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "limit": {
+                    "type": "integer", "minimum": 1, "maximum": 50,
+                    "description": "How many recent items (default 10)"
+                },
+                "unseen_only": {
+                    "type": "boolean",
+                    "description": "Only items the human hasn't acknowledged yet (default false)"
+                }
+            }
+        }
+    })
+}
+
+fn inbox_recent(args: &Value) -> Value {
+    let limit = args
+        .get("limit")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(10)
+        .clamp(1, 50) as usize;
+    let unseen_only = args
+        .get("unseen_only")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    let items: Vec<Value> = podapp_runtime::artifacts::list()
+        .into_iter()
+        .filter(|a| !unseen_only || !a.seen)
+        .take(limit)
+        .map(|a| {
+            json!({
+                "id": a.id,
+                "kind": a.kind,
+                "from_pod": a.source,
+                "action": a.action,
+                "note": a.message,
+                "bytes": a.bytes,
+                "width": a.w,
+                "height": a.h,
+                "path": podapp_runtime::artifacts::path_of(&a.id)
+                    .map(|p| p.display().to_string()),
+            })
+        })
+        .collect();
+
+    json!({ "count": items.len(), "items": items })
+}
+
 /// 当前可暴露的工具。
 ///
 /// 只列**无头可跑**的动作：声明 `headless: false` 的动作在 MCP 这条路上根本执行不了，
 /// 列出来只会让 AI 反复尝试再反复失败。
 pub fn tools() -> Vec<Value> {
+    std::iter::once(inbox_tool())
+        .chain(action_tools())
+        .collect()
+}
+
+fn action_tools() -> Vec<Value> {
     podapp_runtime::manifest::action_specs()
         .into_iter()
         .filter(|a| a.bindings.is_none() || a.input_schema.is_some() || !a.title.is_empty())
@@ -74,6 +153,20 @@ pub fn call_tool(params: &Value, caps: &Capabilities) -> Result<Value, (i64, Str
         .get("name")
         .and_then(|v| v.as_str())
         .ok_or((-32602, "缺少工具名".to_string()))?;
+
+    // 收件箱不是程序舱动作，走不到下面那条动作总线 —— 它读的是宿主的收件箱，
+    // 不属于任何一个程序舱，所以在这里先接住。
+    if name == INBOX_TOOL {
+        let args = params
+            .get("arguments")
+            .cloned()
+            .unwrap_or_else(|| json!({}));
+        let out = inbox_recent(&args);
+        return Ok(json!({
+            "content": [{ "type": "text", "text": render(&out) }],
+            "isError": false,
+        }));
+    }
 
     // 两种写法都认：原始 Action ID，以及点号换下划线之后的名字
     let spec = podapp_runtime::manifest::action_specs()
@@ -235,5 +328,125 @@ mod tests {
         assert!(s.starts_with("已切成 9 张"), "一行人话该在最前面: {s}");
         assert!(s.contains("C:/x/a.png"));
         assert!(!s.contains("iVBORw0"), "不许把像素糊进对话");
+    }
+}
+
+#[cfg(test)]
+mod inbox_tests {
+    use super::*;
+
+    /// 收件箱读的是进程级的 `PODAPP_ARTIFACTS_ROOT`，几个测试同时改会互相踩。
+    /// 锁在代码里而不是靠 `--test-threads=1` —— 需要特殊参数才能过的测试是陷阱。
+    static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn sandbox(tag: &str, f: impl FnOnce()) {
+        let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = std::env::temp_dir().join(format!("podapp-mcp-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::env::set_var("PODAPP_ARTIFACTS_ROOT", &dir);
+        podapp_runtime::artifacts::clear();
+        f();
+        std::env::remove_var("PODAPP_ARTIFACTS_ROOT");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    const PNG: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+    /// 收件箱工具必须出现在 tools/list 里 —— 不在列表里，AI 根本不知道能问。
+    #[test]
+    fn inbox_tool_is_advertised() {
+        let names: Vec<String> = tools()
+            .iter()
+            .filter_map(|t| t["name"].as_str().map(String::from))
+            .collect();
+        assert!(
+            names.contains(&INBOX_TOOL.to_string()),
+            "工具清单里没有收件箱: {names:?}"
+        );
+    }
+
+    /// 人交出来的东西，AI 要能原样取到引用。
+    #[test]
+    fn agent_can_fetch_what_the_human_just_produced() {
+        sandbox("fetch", || {
+            podapp_runtime::artifacts::emit(
+                "org.podapp.image.annotate",
+                Some("app.annotate.task.build"),
+                "image",
+                PNG,
+                Some("3 处标注 · 1920×1080"),
+            )
+            .unwrap();
+
+            let out = inbox_recent(&json!({}));
+            assert_eq!(out["count"], 1);
+            let it = &out["items"][0];
+            assert_eq!(it["from_pod"], "org.podapp.image.annotate");
+            assert_eq!(it["note"], "3 处标注 · 1920×1080");
+            // 给的是**路径**，AI 自己去读
+            let p = it["path"].as_str().expect("要给出落盘路径");
+            assert!(std::path::Path::new(p).exists(), "路径不存在: {p}");
+        });
+    }
+
+    /// **绝不回内容。** 一张图 base64 进返回值 = 把对方上下文烧掉换一个它不需要的东西。
+    /// 这条比「能取到」更容易在后续改动里破功，所以单独钉一条。
+    #[test]
+    fn never_returns_file_contents() {
+        sandbox("noblob", || {
+            podapp_runtime::artifacts::emit("p", None, "image", PNG, Some("x")).unwrap();
+            let s = inbox_recent(&json!({})).to_string();
+            assert!(!s.contains("iVBORw0"), "返回值里混进了 PNG base64");
+            assert!(!s.contains("data:image"), "返回值里混进了 data URL");
+        });
+    }
+
+    #[test]
+    fn limit_and_unseen_filter_work() {
+        sandbox("filter", || {
+            for i in 0..4 {
+                podapp_runtime::artifacts::emit("p", None, "image", PNG, Some(&format!("#{i}")))
+                    .unwrap();
+            }
+            assert_eq!(inbox_recent(&json!({ "limit": 2 }))["count"], 2);
+            // 全都没看过，所以 unseen_only 应当一个不少
+            assert_eq!(inbox_recent(&json!({ "unseen_only": true }))["count"], 4);
+            let ids: Vec<String> = podapp_runtime::artifacts::list()
+                .iter()
+                .map(|a| a.id.clone())
+                .collect();
+            podapp_runtime::artifacts::mark_seen(&ids[..2]);
+            assert_eq!(inbox_recent(&json!({ "unseen_only": true }))["count"], 2);
+        });
+    }
+
+    /// 空收件箱要给出干净的 0，不能报错 —— AI 问「有什么给我吗」得到一个错误，
+    /// 多半会重试或者放弃，而正确答案只是「暂时没有」。
+    #[test]
+    fn empty_inbox_is_not_an_error() {
+        sandbox("empty", || {
+            let out = inbox_recent(&json!({}));
+            assert_eq!(out["count"], 0);
+            assert!(out["items"].as_array().unwrap().is_empty());
+        });
+    }
+
+    /// 走完整的 MCP `tools/call` 入口，不是直接调内部函数 ——
+    /// 分发那一步接错了名字，上面几条照样全绿。
+    #[test]
+    fn reachable_through_the_real_tools_call_path() {
+        sandbox("dispatch", || {
+            podapp_runtime::artifacts::emit("p", None, "image", PNG, Some("hi")).unwrap();
+            let caps = Capabilities::builtin();
+            let r = call_tool(
+                &json!({ "name": INBOX_TOOL, "arguments": { "limit": 1 } }),
+                &caps,
+            )
+            .expect("收件箱工具应当可调用");
+            assert_eq!(r["isError"], false);
+            let text = r["content"][0]["text"].as_str().unwrap();
+            assert!(text.contains("hi"), "返回里没有那行人话: {text}");
+        });
     }
 }
