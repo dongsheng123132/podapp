@@ -294,6 +294,28 @@ for (const f of readdirSync(schemaOut)) {
   }
 }
 
+// ---- 自动更新清单 ----
+//
+// 从最新 Release 镜像一份到 /latest.json，让客户端的第一顺位端点是 podapp.net 自己。
+// 独立产品的更新源长期挂在 U-King 的域名下，说不上解耦。
+//
+// **拿不到只警告，不让构建失败** —— 和上面的 schema 刚好相反，因为失败语义不同：
+// schema 死链没人兜底（编辑器直接 404），而这里客户端本来就会按顺序回退到 GitHub，
+// 少这一份只是慢一点，不是坏掉。为一个能自愈的缺失卡住整个官网发布不划算。
+try {
+  const r = await fetch(`${REPO}/releases/latest/download/latest.json`, { redirect: "follow" });
+  if (r.ok) {
+    const text = await r.text();
+    JSON.parse(text); // 先确认是合法 JSON，别把一张 404 页面当清单发出去
+    writeFileSync(join(out, "latest.json"), text);
+    console.log("  latest.json ← 镜像自最新 Release");
+  } else {
+    console.warn(`  ⚠ 没镜像到 latest.json（HTTP ${r.status}）—— 客户端会回退到 GitHub，不影响更新`);
+  }
+} catch (e) {
+  console.warn(`  ⚠ 没镜像到 latest.json（${e.message}）—— 客户端会回退到 GitHub，不影响更新`);
+}
+
 console.log(`站点已生成到 website/`);
 console.log(`  1 张首页 + ${pods.length} 个程序舱页`);
 for (const p of pods) console.log(`    /pods/${p.slug}  ${p.name} v${p.version}`);
