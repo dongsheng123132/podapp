@@ -10,7 +10,10 @@
     "author": "PodApp",
     "homepage": "https://podapp.net/pods/nine-grid",
     "license": "MIT",
-    "locales": ["zh-CN"],
+    "locales": [
+      "zh-CN",
+      "en"
+    ],
     "min_host_version": "0.1.0"
   },
   "action_parity": "./action-parity.json",
@@ -26,10 +29,18 @@
     "icon": "lucide:grid-3x3",
     "accent": "#49bdd0",
     "container": "window",
-    "window": { "width": 900, "height": 680, "resizable": true },
+    "window": {
+      "width": 900,
+      "height": 680,
+      "resizable": true
+    },
     "home_dock": true,
     "quick_actions": [
-      { "action": "app.nine-grid.image.split", "label": "切九宫格", "icon": "lucide:grid-3x3" }
+      {
+        "action": "app.nine-grid.image.split",
+        "label": "切九宫格",
+        "icon": "lucide:grid-3x3"
+      }
     ]
   },
   "permissions": {
@@ -40,12 +51,32 @@
       "video_generate": false,
       "max_calls_per_run": 0
     },
-    "fs": { "app_data": true, "save_dialog": false, "open_dialog": false },
-    "net": { "allow": [] },
-    "host_actions": ["host.zip.pack"]
+    "fs": {
+      "app_data": true,
+      "save_dialog": false,
+      "open_dialog": false
+    },
+    "net": {
+      "allow": []
+    },
+    "host_actions": [
+      "host.zip.pack"
+    ]
   },
   "market": {
     "category": "image",
-    "tags": ["切图", "九宫格", "朋友圈", "小红书"]
+    "tags": [
+      "切图",
+      "九宫格",
+      "朋友圈",
+      "小红书"
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Nine-Grid Splitter",
+      "summary": "Split one image into nine — pixel-exact",
+      "description": "AI often draws a 3×3 collage, but Instagram and Xiaohongshu want nine separate files. This pod splits by rows and columns, optionally discarding the gutter AI leaves between cells. Every tile is delivered on its own. No recompression, no resizing — what you cut is what you get. Tick the zip box to take them all at once."
+    }
   }
 }

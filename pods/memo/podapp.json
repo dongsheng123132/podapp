@@ -10,22 +10,37 @@
     "author": "PodApp",
     "homepage": "https://podapp.net/pods/memo",
     "license": "MIT",
-    "locales": ["zh-CN"],
+    "locales": [
+      "zh-CN",
+      "en"
+    ],
     "min_host_version": "0.1.0"
   },
   "action_parity": "./action-parity.json",
   "package": {
     "kind": "web",
-    "web": { "root": "web", "entry": "index.html", "actions": "actions.mjs" }
+    "web": {
+      "root": "web",
+      "entry": "index.html",
+      "actions": "actions.mjs"
+    }
   },
   "ui": {
     "icon": "lucide:sticky-note",
     "accent": "#e2c35b",
     "container": "window",
-    "window": { "width": 420, "height": 560, "resizable": true },
+    "window": {
+      "width": 420,
+      "height": 560,
+      "resizable": true
+    },
     "home_dock": true,
     "quick_actions": [
-      { "action": "app.memo.note.save", "label": "新建备忘", "icon": "lucide:plus" }
+      {
+        "action": "app.memo.note.save",
+        "label": "新建备忘",
+        "icon": "lucide:plus"
+      }
     ]
   },
   "permissions": {
@@ -36,9 +51,30 @@
       "video_generate": false,
       "max_calls_per_run": 0
     },
-    "fs": { "app_data": true, "save_dialog": false, "open_dialog": false },
-    "net": { "allow": [] },
+    "fs": {
+      "app_data": true,
+      "save_dialog": false,
+      "open_dialog": false
+    },
+    "net": {
+      "allow": []
+    },
     "host_actions": []
   },
-  "market": { "category": "productivity", "tags": ["备忘录", "便签", "笔记", "效率"] }
+  "market": {
+    "category": "productivity",
+    "tags": [
+      "备忘录",
+      "便签",
+      "笔记",
+      "效率"
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Sticky Memo",
+      "summary": "Jot it down — auto-saved, and AI can edit it too",
+      "description": "A scratchpad that lives in the dock. Human writes, AI reads and writes the same notes through stable actions."
+    }
+  }
 }

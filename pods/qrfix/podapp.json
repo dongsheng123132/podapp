@@ -10,22 +10,37 @@
     "author": "PodApp",
     "homepage": "https://podapp.net/pods/qrfix",
     "license": "MIT",
-    "locales": ["zh-CN"],
+    "locales": [
+      "zh-CN",
+      "en"
+    ],
     "min_host_version": "0.1.0"
   },
   "action_parity": "./action-parity.json",
   "package": {
     "kind": "web",
-    "web": { "root": "web", "entry": "index.html", "actions": "actions.mjs" }
+    "web": {
+      "root": "web",
+      "entry": "index.html",
+      "actions": "actions.mjs"
+    }
   },
   "ui": {
     "icon": "lucide:qr-code",
     "accent": "#39c77c",
     "container": "window",
-    "window": { "width": 1000, "height": 720, "resizable": true },
+    "window": {
+      "width": 1000,
+      "height": 720,
+      "resizable": true
+    },
     "home_dock": true,
     "quick_actions": [
-      { "action": "app.qrfix.code.replace", "label": "制作海报真码", "icon": "lucide:qr-code" }
+      {
+        "action": "app.qrfix.code.replace",
+        "label": "制作海报真码",
+        "icon": "lucide:qr-code"
+      }
     ],
     "annotation": {
       "kind": "rect",
@@ -36,10 +51,37 @@
     }
   },
   "permissions": {
-    "ai": { "image_generate": false, "image_edit": false, "chat": false, "video_generate": false, "max_calls_per_run": 0 },
-    "fs": { "app_data": true, "save_dialog": false, "open_dialog": false },
-    "net": { "allow": [] },
+    "ai": {
+      "image_generate": false,
+      "image_edit": false,
+      "chat": false,
+      "video_generate": false,
+      "max_calls_per_run": 0
+    },
+    "fs": {
+      "app_data": true,
+      "save_dialog": false,
+      "open_dialog": false
+    },
+    "net": {
+      "allow": []
+    },
     "host_actions": []
   },
-  "market": { "category": "image", "tags": ["二维码", "海报", "改图", "可扫描"] }
+  "market": {
+    "category": "image",
+    "tags": [
+      "二维码",
+      "海报",
+      "改图",
+      "可扫描"
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Poster QR Fix",
+      "summary": "Replace fake AI QR codes with real, scannable ones",
+      "description": "AI draws QR codes that look right and scan into nothing. This pod composites a real one onto the poster — and scans the finished image before handing it back. If it does not scan, you do not get the file."
+    }
+  }
 }
