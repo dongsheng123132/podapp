@@ -1,0 +1,38 @@
+<!--
+  PodApp / 泊舟 图标源文件。**所有尺寸都从这一份生成**，别手改 PNG：
+
+      npx @tauri-apps/cli@2 icon apps/podapp-dock/icons-src/podapp-logo.png
+
+  配色取自内置的「泊舟」皮肤（src/skins/boat.dock-skin.json），改色请两边一起改。
+
+  形要在 32×32 上还认得出来，所以只有三块实心色：船身、主帆、前帆。
+  两张帆之间留 24px 缝，缩小后那道缝自己会读成桅杆 —— 真画一根 4px 的桅杆
+  在 32px 下会糊成一团。
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1b2024"/>
+      <stop offset="1" stop-color="#12161a"/>
+    </linearGradient>
+    <linearGradient id="mainsail" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#f4f8f9"/>
+      <stop offset="1" stop-color="#d3dee0"/>
+    </linearGradient>
+    <linearGradient id="hull" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2fc496"/>
+      <stop offset="1" stop-color="#1e9c77"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="112" fill="url(#tile)"/>
+
+  <!-- 主帆：右倾，弧形后缘 -->
+  <path d="M274 96 C 352 170 394 240 400 322 L274 322 Z" fill="url(#mainsail)"/>
+
+  <!-- 前帆：左侧，小一号 -->
+  <path d="M238 150 C 198 214 176 268 168 322 L238 322 Z" fill="#56d39b"/>
+
+  <!-- 船身。帆底到船顶只留 10px —— 留宽了缩到 32px 时帆会像浮在船上方 -->
+  <path d="M84 332 L428 332 C 420 402 352 430 256 430 C 160 430 92 402 84 332 Z" fill="url(#hull)"/>
+</svg>
