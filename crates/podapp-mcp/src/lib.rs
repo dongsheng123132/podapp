@@ -19,13 +19,83 @@
 //! JSON-RPC 2.0 over stdio。**stdout 只有协议，日志一律走 stderr** ——
 //! 往 stdout 里多打一个字节，对面的解析器就崩了，而症状是「MCP 服务器连不上」，
 //! 跟原因隔着好几层。
+//!
+//! # 两套握手同时在线
+//!
+//! 2026-07-28 把 MCP 改成了无状态：没有 `initialize` 握手，协议版本和客户端能力
+//! 改成每个请求塞在 `_meta` 里，服务器**必须**实现 [`server/discover`]。
+//!
+//! 但老客户端还在，而且规范自己就说 stdio 上 `server/discover` 可以当**向后兼容探针**。
+//! 所以这里两条都留着：
+//!
+//! - 新客户端先问 `server/discover`，拿到 `supportedVersions`，之后每个请求自报版本
+//! - 老客户端照旧 `initialize`，拿到 [`LEGACY_PROTOCOL_VERSION`]
+//!
+//! **只在对方明确报了版本时才校验版本。** 不带 `_meta` 的请求一律按老客户端放行 ——
+//! 对它们摆出 `UnsupportedProtocolVersion`，等于把今天能连的客户端全踢下线。
+//!
+//! [`server/discover`]: https://modelcontextprotocol.io/specification/2026-07-28/server/discover
 
 use podapp_runtime::{Capabilities, HeadlessHost, Invocation};
 use serde_json::{json, Value};
 
+/// 认得的协议版本，**新的在前**（`server/discover` 按这个顺序端出去，
+/// 客户端一般取第一个能用的）。
+pub const SUPPORTED_VERSIONS: &[&str] = &["2026-07-28", "2024-11-05"];
+
+/// 老握手（`initialize`）回的版本。
+///
 /// 跟 U-King 的 MCP 实现保持同一个版本号：同一台机器上两个宿主暴露同一批动作，
 /// 协议版本不一致会让客户端表现出「有时能连有时不能」。
-const PROTOCOL_VERSION: &str = "2024-11-05";
+/// **这个常量要改，得和 U-King 的 `mcp_serve.rs` 同一次改** —— 新版本从
+/// [`SUPPORTED_VERSIONS`] 那条路进来，不动这里，两边就不会因为升级节奏错开而分家。
+const LEGACY_PROTOCOL_VERSION: &str = "2024-11-05";
+
+/// 工具表的新鲜度提示（毫秒），随 `tools/list` 一起下发。
+///
+/// 工具表是**现算**的：装一个 `.pod` 它就变了。TTL 是这中间唯一的杠杆 ——
+/// 给太长，「装完立刻能用」这句话就破功；给太短，对面每次都重新拉一遍工具表，
+/// 白白搅掉 LLM 的 prompt cache。人装一个程序舱本来就要几秒，30 秒是这两头的中点。
+const TOOLS_TTL_MS: u64 = 30_000;
+
+/// 规范定义的错误码：客户端要的协议版本这边不认。
+///
+/// **`-32020` 到 `-32099` 是规范保留段**，这一段里只准用规范定义过的码。
+/// 别在这个区间里自己发明码 —— 那是明确禁止的。
+const UNSUPPORTED_PROTOCOL_VERSION: i64 = -32022;
+
+/// 请求里自报协议版本的 `_meta` 键。
+const META_PROTOCOL_VERSION: &str = "io.modelcontextprotocol/protocolVersion";
+
+/// 结果里自报身份的 `_meta` 键。
+const META_SERVER_INFO: &str = "io.modelcontextprotocol/serverInfo";
+
+fn server_info() -> Value {
+    json!({ "name": "podapp", "version": env!("CARGO_PKG_VERSION") })
+}
+
+/// 给一个结果盖上 `resultType` 和服务器身份。
+///
+/// 新规范要求**每个**结果都带 `resultType`；老客户端见到不认识的字段会忽略，
+/// 所以两边都发是安全的 —— 不需要按对方版本分两套结果。
+fn complete(mut result: Value) -> Value {
+    if let Some(obj) = result.as_object_mut() {
+        obj.insert("resultType".into(), json!("complete"));
+        obj.entry("_meta")
+            .or_insert_with(|| json!({}))
+            .as_object_mut()
+            .map(|m| m.insert(META_SERVER_INFO.into(), server_info()));
+    }
+    result
+}
+
+/// 对方这一条请求自报的协议版本。没有就是老客户端。
+fn requested_version(params: &Value) -> Option<&str> {
+    params
+        .get("_meta")?
+        .get(META_PROTOCOL_VERSION)?
+        .as_str()
+}
 
 /// 动作 ID → MCP 工具名。
 ///
@@ -117,6 +187,10 @@ fn inbox_recent(args: &Value) -> Value {
 ///
 /// 只列**无头可跑**的动作：声明 `headless: false` 的动作在 MCP 这条路上根本执行不了，
 /// 列出来只会让 AI 反复尝试再反复失败。
+///
+/// 顺序是**确定的**：收件箱永远第一（它是宿主自己的能力，不属于任何程序舱），
+/// 其余按工具名排序。规范建议这么做是为了对面的 prompt cache —— 同一批程序舱
+/// 每次给出同一个字节序列，缓存才命中得了；顺序随目录遍历飘，等于每次都让对方重算。
 pub fn tools() -> Vec<Value> {
     std::iter::once(inbox_tool())
         .chain(action_tools())
@@ -124,7 +198,9 @@ pub fn tools() -> Vec<Value> {
 }
 
 fn action_tools() -> Vec<Value> {
-    podapp_runtime::manifest::action_specs()
+    let mut specs = podapp_runtime::manifest::action_specs();
+    specs.sort_by(|a, b| tool_name(&a.id).cmp(&tool_name(&b.id)));
+    specs
         .into_iter()
         .filter(|a| a.bindings.is_none() || a.input_schema.is_some() || !a.title.is_empty())
         .map(|a| {
@@ -212,6 +288,25 @@ fn render(v: &Value) -> String {
     out
 }
 
+/// 服务器身份、能力、认得的协议版本 —— 一次问清。
+///
+/// 新规范里服务器**必须**实现这条；它同时是 stdio 上的向后兼容探针：
+/// 答得上来就是新服务器，答 `-32601` 就退回 `initialize`。
+fn discover() -> Value {
+    json!({
+        "supportedVersions": SUPPORTED_VERSIONS,
+        "capabilities": { "tools": {} },
+        "instructions": "已装程序舱的动作都在这里。人在浮舱里点按钮、你在这里调工具，\
+走的是同一条执行路径，所以你能做的事和用户能做的事完全一致。\
+产物一律只回引用（路径 / id），要内容自己去读。\
+问 podapp_inbox_recent 可以看到人刚在浮舱里产出了什么。",
+        // 身份和能力只在装卸程序舱时才变，比工具表稳得多；
+        // cacheScope 仍是 private —— 这是本机用户装了什么的事实，不该被共享中间层缓存。
+        "ttlMs": TOOLS_TTL_MS,
+        "cacheScope": "private",
+    })
+}
+
 /// 处理一条 JSON-RPC 消息。
 ///
 /// 返回 `None` 表示这是**通知**（没有 `id`），按 JSON-RPC 规范不能回 ——
@@ -221,14 +316,39 @@ pub fn handle(msg: &Value, caps: &Capabilities) -> Option<Value> {
     let method = msg.get("method").and_then(|v| v.as_str()).unwrap_or("");
     let params = msg.get("params").cloned().unwrap_or_else(|| json!({}));
 
+    // 版本闸只对**自报了版本**的请求生效。老客户端不带 `_meta`，
+    // 拿新规范的强制字段去要求它们，等于把今天能连的客户端全踢下线。
+    if let Some(v) = requested_version(&params) {
+        if !SUPPORTED_VERSIONS.contains(&v) {
+            let id = id?;
+            return Some(json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "error": {
+                    "code": UNSUPPORTED_PROTOCOL_VERSION,
+                    "message": format!("不认得的协议版本: {v}"),
+                    "data": { "supportedVersions": SUPPORTED_VERSIONS },
+                }
+            }));
+        }
+    }
+
     let result = match method {
+        "server/discover" => Ok(discover()),
         "initialize" => Ok(json!({
-            "protocolVersion": PROTOCOL_VERSION,
+            "protocolVersion": LEGACY_PROTOCOL_VERSION,
             "capabilities": { "tools": {} },
-            "serverInfo": { "name": "podapp", "version": env!("CARGO_PKG_VERSION") },
+            "serverInfo": server_info(),
         })),
-        "tools/list" => Ok(json!({ "tools": tools() })),
+        // 工具表是现算的，所以必须带新鲜度提示，否则对面要么长期看不到新装的程序舱，
+        // 要么每轮都重拉一遍
+        "tools/list" => Ok(json!({
+            "tools": tools(),
+            "ttlMs": TOOLS_TTL_MS,
+            "cacheScope": "private",
+        })),
         "tools/call" => call_tool(&params, caps),
+        // 新规范删了 ping，但老客户端还会发 —— 收下，别报错
         "ping" => Ok(json!({})),
         // notifications/* 是通知，本来就没有 id，下面会被过滤掉
         _ if method.starts_with("notifications/") => Ok(json!({})),
@@ -239,7 +359,7 @@ pub fn handle(msg: &Value, caps: &Capabilities) -> Option<Value> {
     let id = id?;
 
     Some(match result {
-        Ok(r) => json!({ "jsonrpc": "2.0", "id": id, "result": r }),
+        Ok(r) => json!({ "jsonrpc": "2.0", "id": id, "result": complete(r) }),
         Err((code, message)) => {
             json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message } })
         }
@@ -279,9 +399,92 @@ mod tests {
         )
         .unwrap();
         assert_eq!(r["id"], 1);
-        assert_eq!(r["result"]["protocolVersion"], PROTOCOL_VERSION);
+        assert_eq!(r["result"]["protocolVersion"], LEGACY_PROTOCOL_VERSION);
         assert!(r["result"]["capabilities"]["tools"].is_object());
         assert_eq!(r["result"]["serverInfo"]["name"], "podapp");
+    }
+
+    /// 老客户端**一个字都不用改**还得能连上。
+    /// 这条是整个升级里唯一会伤到现有用户的地方，所以单独钉一条。
+    #[test]
+    fn a_client_that_never_mentions_a_version_still_works() {
+        for m in ["initialize", "tools/list", "ping"] {
+            let r = handle(&json!({ "jsonrpc": "2.0", "id": 1, "method": m }), &caps())
+                .unwrap_or_else(|| panic!("{m} 没有应答"));
+            assert!(r["error"].is_null(), "{m} 不该报错: {r}");
+        }
+    }
+
+    #[test]
+    fn discover_advertises_both_dialects_and_identifies_itself() {
+        let r = handle(
+            &json!({ "jsonrpc": "2.0", "id": 7, "method": "server/discover",
+                     "params": { "_meta": { META_PROTOCOL_VERSION: "2026-07-28" } } }),
+            &caps(),
+        )
+        .unwrap();
+        let versions = r["result"]["supportedVersions"].as_array().unwrap();
+        assert!(versions.iter().any(|v| v == "2026-07-28"));
+        // 老方言必须一起端出去，否则老客户端探到 discover 之后会以为自己被抛弃了
+        assert!(versions.iter().any(|v| v == LEGACY_PROTOCOL_VERSION));
+        assert_eq!(r["result"]["_meta"][META_SERVER_INFO]["name"], "podapp");
+    }
+
+    /// 新规范要求**每个**结果都自报类型。漏一个，严格客户端就把那条结果判为无效。
+    #[test]
+    fn every_result_declares_its_type() {
+        for m in ["server/discover", "initialize", "tools/list", "ping"] {
+            let r = handle(&json!({ "jsonrpc": "2.0", "id": 1, "method": m }), &caps()).unwrap();
+            assert_eq!(r["result"]["resultType"], "complete", "{m} 没带 resultType");
+        }
+    }
+
+    /// 工具表是现算的 —— 不给新鲜度提示，对面只能猜：要么长期看不到新装的程序舱，
+    /// 要么每轮都重拉一遍把 prompt cache 搅掉。
+    #[test]
+    fn the_tool_list_says_how_long_it_stays_fresh() {
+        let r = handle(
+            &json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" }),
+            &caps(),
+        )
+        .unwrap();
+        assert!(r["result"]["ttlMs"].as_u64().unwrap() > 0);
+        // 本机装了什么是用户的事实，绝不能让共享中间层缓存
+        assert_eq!(r["result"]["cacheScope"], "private");
+    }
+
+    /// 同一批程序舱每次要给出同一个顺序，对面的 prompt cache 才命中得了。
+    #[test]
+    fn tools_come_back_in_a_stable_order() {
+        let names = |v: &Value| -> Vec<String> {
+            v["result"]["tools"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|t| t["name"].as_str().unwrap_or_default().to_string())
+                .collect()
+        };
+        let req = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" });
+        let first = names(&handle(&req, &caps()).unwrap());
+        assert_eq!(first, names(&handle(&req, &caps()).unwrap()));
+        // 收件箱是宿主自己的能力，永远排头 —— 它不该跟着某个程序舱的名字漂
+        assert_eq!(first.first().map(String::as_str), Some(INBOX_TOOL));
+        let mut sorted = first[1..].to_vec();
+        sorted.sort();
+        assert_eq!(&first[1..], &sorted[..], "程序舱动作没有按名字排序");
+    }
+
+    #[test]
+    fn an_unknown_protocol_version_is_refused_with_the_code_the_spec_defines() {
+        let r = handle(
+            &json!({ "jsonrpc": "2.0", "id": 5, "method": "tools/list",
+                     "params": { "_meta": { META_PROTOCOL_VERSION: "1999-01-01" } } }),
+            &caps(),
+        )
+        .unwrap();
+        assert_eq!(r["error"]["code"], UNSUPPORTED_PROTOCOL_VERSION);
+        // 光说「不认」没用，得告诉对面认什么，它才知道降到哪一版
+        assert!(r["error"]["data"]["supportedVersions"].is_array());
     }
 
     #[test]
