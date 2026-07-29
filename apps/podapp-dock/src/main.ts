@@ -5,6 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check } from "@tauri-apps/plugin-updater";
+import { Pet, spriteUrl } from "./pet";
 import {
   applySkin,
   builtinSkins,
@@ -48,10 +49,20 @@ type DockPlacement = {
   height: number;
 };
 
+/** 一只 Codex 宠物。跟 `podapp_codex::pets::PetInfo::to_json` 一一对应。 */
+type PetSummary = {
+  id: string;
+  displayName: string;
+  description: string;
+  bytes: number;
+};
+
 type View = "home" | "developer" | "skins";
 
 const POSITION_KEY = "podapp.dock-position.v1";
 const ACTIVE_SKIN_KEY = "podapp.active-skin.v1";
+/** 选中的宠物**独立于皮肤存**：换个配色不该把宠物弄丢。 */
+const ACTIVE_PET_KEY = "podapp.active-pet.v1";
 const EDGE_LABELS: Record<string, string> = {
   left: "左侧",
   right: "右侧",
@@ -81,6 +92,8 @@ const copyStatus = $<HTMLParagraphElement>("copyStatus");
 const skinList = $<HTMLDivElement>("skinList");
 const skinFile = $<HTMLInputElement>("skinFile");
 const skinStatus = $<HTMLParagraphElement>("skinStatus");
+const petList = $<HTMLDivElement>("petList");
+const petHint = $<HTMLElement>("petHint");
 const boatMark = $<HTMLSpanElement>("boatMark");
 const brandMark = $<HTMLSpanElement>("brandMark");
 const appWindow = getCurrentWindow();
@@ -92,11 +105,17 @@ let customSkins = loadCustomSkins();
 let activeSkinId = localStorage.getItem(ACTIVE_SKIN_KEY) ?? builtinSkins[0].id;
 let cachedWindow = { x: 0, y: 0, scale: 1, ready: false };
 
+const pet = new Pet();
+let pets: PetSummary[] = [];
+let activePetId = localStorage.getItem(ACTIVE_PET_KEY);
+
 type DragSession = {
   pointerId: number;
   surface: HTMLElement;
   startScreenX: number;
   startScreenY: number;
+  /** 上一帧的横坐标 —— 宠物朝哪边跑看的是它，不是起点 */
+  lastScreenX: number;
   originX: number | null;
   originY: number | null;
   scale: number;
@@ -112,13 +131,44 @@ function allSkins() {
   return [...byId.values()];
 }
 
+function activeSkin(): DockSkin {
+  return allSkins().find((skin) => skin.id === activeSkinId) ?? builtinSkins[0];
+}
+
+/**
+ * 把宠物贴上去，或者取下来换回 emoji 标记。
+ *
+ * 贴上宠物时**必须清掉标记文字**：emoji 会盖在图集上面，
+ * 而那看起来像"宠物身上多了个不该有的东西"，不像"两层叠了"。
+ */
+function applyPet() {
+  const mark = activeSkin().mark;
+  const chosen = activePetId && pets.some((item) => item.id === activePetId)
+    ? activePetId
+    : null;
+  pet.mount([boatMark, brandMark], chosen);
+  boatMark.textContent = chosen ? "" : mark;
+  brandMark.textContent = chosen ? "" : mark;
+}
+
+function selectPet(id: string | null) {
+  activePetId = id;
+  if (id) localStorage.setItem(ACTIVE_PET_KEY, id);
+  else localStorage.removeItem(ACTIVE_PET_KEY);
+  applyPet();
+  renderPets();
+}
+
 function selectSkin(skin: DockSkin) {
   activeSkinId = skin.id;
   localStorage.setItem(ACTIVE_SKIN_KEY, skin.id);
   applySkin(skin);
-  boatMark.textContent = skin.mark;
-  brandMark.textContent = skin.mark;
+  // 皮肤自带宠物就顺带换过去 —— 那是皮肤作者的意图。
+  // 不带的皮肤不动当前宠物：换个配色不该把宠物弄丢。
+  if (skin.sprite?.pet) activePetId = skin.sprite.pet;
+  applyPet();
   renderSkins();
+  renderPets();
 }
 
 function renderSkins() {
@@ -149,6 +199,80 @@ function renderSkins() {
     button.onclick = () => selectSkin(skin);
     return button;
   }));
+}
+
+function renderPets() {
+  const rows: HTMLButtonElement[] = [];
+
+  const none = document.createElement("button");
+  none.type = "button";
+  none.className = "skin-row";
+  none.classList.toggle("selected", !activePetId);
+  const noneSwatch = document.createElement("span");
+  noneSwatch.className = "skin-swatch";
+  noneSwatch.textContent = activeSkin().mark;
+  const noneLabel = document.createElement("span");
+  noneLabel.className = "skin-label";
+  const noneName = document.createElement("b");
+  noneName.textContent = "不用宠物";
+  const noneSub = document.createElement("small");
+  noneSub.textContent = "只显示皮肤标记";
+  noneLabel.append(noneName, noneSub);
+  const noneCheck = document.createElement("span");
+  noneCheck.className = "skin-check";
+  noneCheck.textContent = activePetId ? "" : "✓";
+  none.append(noneSwatch, noneLabel, noneCheck);
+  none.onclick = () => selectPet(null);
+  rows.push(none);
+
+  for (const item of pets) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "skin-row";
+    button.classList.toggle("selected", item.id === activePetId);
+
+    // 列表里的头像就是 idle 第一帧 —— 契约里那一帧本来就是按「能当静态图用」画的，
+    // 所以这里不用另出一张缩略图。
+    const swatch = document.createElement("span");
+    swatch.className = "skin-swatch pet-thumb";
+    swatch.style.backgroundImage = `url("${spriteUrl(item.id)}")`;
+
+    const label = document.createElement("span");
+    label.className = "skin-label";
+    const name = document.createElement("b");
+    name.textContent = item.displayName;
+    const sub = document.createElement("small");
+    sub.textContent = item.description || `${Math.round(item.bytes / 1024)} KB`;
+    label.append(name, sub);
+
+    const tick = document.createElement("span");
+    tick.className = "skin-check";
+    tick.textContent = item.id === activePetId ? "✓" : "";
+    button.append(swatch, label, tick);
+    button.onclick = () => selectPet(item.id);
+    rows.push(button);
+  }
+
+  petList.replaceChildren(...rows);
+  petHint.textContent = pets.length
+    ? `${pets.length} 只 · 来自 ~/.codex/pets`
+    : "没找到宠物 · 用 Codex 的 hatch-pet 做一只";
+}
+
+/**
+ * 读一遍本机的宠物。
+ *
+ * **读不到就当没有，绝不打扰**：没装 Codex、或者一只宠物都没做过是常态，
+ * 而不是错误。在皮肤面板上红一行「读取宠物失败」，用户什么都没做错却要被吓一次。
+ */
+async function loadPets() {
+  try {
+    pets = await invoke<PetSummary[]>("dock_pets");
+  } catch {
+    pets = [];
+  }
+  applyPet();
+  renderPets();
 }
 
 function applySavedSkin() {
@@ -218,7 +342,14 @@ function render(s: DockStatus) {
     sub.className = "sub";
     sub.textContent = pod.summary ?? pod.permissions.join("、");
     li.append(name, sub);
-    li.onclick = () => invoke("dock_open_pod", { id: pod.id }).catch(warn);
+    li.onclick = () => {
+      // 开程序舱窗口要等 WebView2 起来，几百毫秒到一两秒不等。
+      // 这段时间里界面没有任何反馈，宠物是唯一在动的东西。
+      pet.set("running");
+      invoke("dock_open_pod", { id: pod.id })
+        .catch(warn)
+        .finally(() => pet.rest());
+    };
     return li;
   }));
 
@@ -233,6 +364,9 @@ function render(s: DockStatus) {
 function warn(error: unknown) {
   drop.textContent = String(error);
   drop.classList.add("bad");
+  // 出错时宠物也垮一下。收起态看不到那行红字（只有 64px 的浮舱），
+  // 宠物是那个状态下唯一能传达「刚才没成」的东西。
+  pet.once("failed");
   setTimeout(() => {
     drop.classList.remove("bad");
     drop.textContent = "拖入图像、网页或 .pod";
@@ -274,6 +408,7 @@ function beginPointerDrag(event: PointerEvent) {
     surface,
     startScreenX: event.screenX,
     startScreenY: event.screenY,
+    lastScreenX: event.screenX,
     originX: cachedWindow.ready ? cachedWindow.x : null,
     originY: cachedWindow.ready ? cachedWindow.y : null,
     scale: cachedWindow.scale,
@@ -303,6 +438,12 @@ function continuePointerDrag(event: PointerEvent) {
   const dx = event.screenX - session.startScreenX;
   const dy = event.screenY - session.startScreenY;
   if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return;
+  // 拖着走时朝移动方向跑。用**本次位移相对上一帧**的方向，不是相对起点 ——
+  // 相对起点的话，拖出去再拖回来，宠物会一路朝右跑着往左走。
+  if (Math.abs(event.screenX - session.lastScreenX) >= 2) {
+    pet.set(event.screenX > session.lastScreenX ? "running-right" : "running-left");
+    session.lastScreenX = event.screenX;
+  }
   session.moved = true;
   const x = Math.round(session.originX + dx * session.scale);
   const y = Math.round(session.originY + dy * session.scale);
@@ -316,6 +457,7 @@ async function endPointerDrag(event: PointerEvent) {
   const session = dragSession;
   if (!session || event.pointerId !== session.pointerId) return;
   dragSession = null;
+  pet.rest();
   if (session.surface.hasPointerCapture(event.pointerId)) {
     session.surface.releasePointerCapture(event.pointerId);
   }
@@ -371,6 +513,10 @@ async function restorePosition() {
   }
 }
 
+// 鼠标碰到收起态的浮舱就招个手。**只在指针真进来时触发一次**，
+// 不用 mousemove —— 那会在整个悬停期间反复重播，看起来像抽搐而不是打招呼。
+boatShell.addEventListener("pointerenter", () => pet.once("waving"));
+
 boat.onclick = () => invoke("dock_expand", { on: true }).then(refresh).catch(warn);
 $("collapse").onclick = () => {
   activeView = "home";
@@ -398,6 +544,9 @@ $("developerBack").onclick = () => setView("home", true);
 $("skins").onclick = () => {
   setView("skins", true);
   renderSkins();
+  // 每次打开都重读：用户可能刚在 Codex 那边用 hatch-pet 做了一只新的。
+  // 只在启动时读一次的话，得重启浮舱才看得见，而没人会想到要重启。
+  loadPets();
 };
 $("skinBack").onclick = () => setView("home", true);
 
@@ -445,6 +594,7 @@ listen<string[]>("dock://dropped", async (event) => {
     try {
       const pod = await invoke<PodInfo>("dock_install", { path });
       drop.textContent = `已安装 ${pod.name} v${pod.version}`;
+      pet.once("jumping");
     } catch (error) {
       warn(error);
     }
@@ -469,22 +619,33 @@ listen<DockPlacement>("dock://placed", (event) => {
  */
 async function checkForUpdate() {
   const button = $("update") as HTMLButtonElement;
-  let update;
+  // 类型**写出来**，别靠 `let update;` 让 TS 自己长出来。
+  //
+  // 自动推断（evolving any）在跨闭包引用时本来就靠不住，而它到底靠不靠得住
+  // 取决于**整个模块**的控制流复杂度：这个文件长到一定程度，TS 就放弃分析，
+  // 这里当场变成三个 TS7005/TS7034 错误。
+  // 实测过：加宠物那几段之后就红了，去掉其中**任意一段**又绿 ——
+  // 也就是说报错位置和真正的原因根本不在一起，下一个往这个文件里加代码的人
+  // 会在一段跟更新毫不相干的代码上撞见它。写死类型，这条路直接堵上。
+  let update: Awaited<ReturnType<typeof check>>;
   try {
     update = await check();
   } catch {
     return; // 网络不通 / 端点没上线 —— 静默
   }
   if (!update) return;
+  // 收进 const 再给闭包用：`let` 上的判空 narrow 传不进闭包里去
+  // （TS 没法保证按钮被点的那一刻它还是非空的）。
+  const ready = update;
 
-  button.textContent = `有新版 ${update.version} · 点此更新`;
+  button.textContent = `有新版 ${ready.version} · 点此更新`;
   button.hidden = false;
   button.onclick = async () => {
     button.disabled = true;
     try {
       // 进度只更新按钮上的字，不另开弹窗 —— 浮舱只有 380px 宽，弹窗会盖住全部内容
       let got = 0;
-      await update.downloadAndInstall((e) => {
+      await ready.downloadAndInstall((e) => {
         if (e.event === "Started") button.textContent = "正在下载…";
         else if (e.event === "Progress") {
           got += e.data.chunkLength;
@@ -505,5 +666,6 @@ async function checkForUpdate() {
 const RELEASES_URL = "https://github.com/dongsheng123132/podapp/releases/latest";
 
 applySavedSkin();
+loadPets();
 restorePosition().then(refresh);
 checkForUpdate();

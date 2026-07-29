@@ -3,7 +3,7 @@ import catSkin from "./skins/cat.dock-skin.json";
 import minimalSkin from "./skins/minimal.dock-skin.json";
 
 export type DockSkin = {
-  spec: "podapp/dock-skin@0.1";
+  spec: "podapp/dock-skin@0.1" | "podapp/dock-skin@0.2";
   id: string;
   name: string;
   author: string;
@@ -20,12 +20,27 @@ export type DockSkin = {
     markBackground: string;
   };
   radius: number;
+  /**
+   * 贴哪只宠物。`@0.2` 新增，可以没有 —— 没有就还是那个 emoji 标记。
+   *
+   * **只写宠物文件夹名，不写路径。** 皮肤是能从陌生人手里导入的 JSON，
+   * 皮肤面板上写着「不执行第三方代码」；让它带一个任意文件路径，
+   * 那句承诺当场就破了。名字怎么解析成路径、解析完还在不在宠物目录里，
+   * 由 Rust 那侧的 `podapp_codex::pets` 说了算。
+   *
+   * 动画表（哪行几帧、每帧多久）刻意**不**放进皮肤：那是 Codex 的契约，
+   * 让皮肤能覆盖它等于让同一份契约有两处定义。
+   */
+  sprite?: { pet: string };
 };
 
-const SPEC = "podapp/dock-skin@0.1";
+const SPECS = ["podapp/dock-skin@0.1", "podapp/dock-skin@0.2"] as const;
 const ID = /^[a-z0-9][a-z0-9.-]{2,80}$/;
 const VERSION = /^\d+\.\d+\.\d+(?:-[a-z0-9.-]+)?$/i;
 const HEX = /^#[0-9a-f]{6}$/i;
+/** 宠物文件夹名。跟 Rust 那侧 `is_safe_id` 是同一套字符集 —— 两边都得挡，
+ *  少一边就等于没挡（界面能被绕开，Rust 不能）。 */
+const PET_ID = /^[a-z0-9][a-z0-9._-]{0,63}$/i;
 const CUSTOM_SKINS_KEY = "podapp.custom-skins.v1";
 
 function record(value: unknown, field: string): Record<string, unknown> {
@@ -54,7 +69,10 @@ function color(value: unknown, field: string): string {
 
 export function parseSkin(value: unknown): DockSkin {
   const source = record(value, "皮肤");
-  if (source.spec !== SPEC) throw new Error(`只支持 ${SPEC}`);
+  // 两版都收。`@0.1` 的皮肤一个字都不用改还得能用 —— 用户手里那些
+  // 自己做的皮肤，不该因为我们加了个宠物字段就集体失效。
+  const spec = SPECS.find((item) => item === source.spec);
+  if (!spec) throw new Error(`只支持 ${SPECS.join(" / ")}`);
   const colors = record(source.colors, "colors");
   const mark = text(source.mark, "mark", 8);
   if (Array.from(mark).length > 4 || /[\u0000-\u001f]/.test(mark)) {
@@ -65,8 +83,15 @@ export function parseSkin(value: unknown): DockSkin {
     throw new Error("radius 必须是 0-16 的数字");
   }
 
+  let sprite: DockSkin["sprite"];
+  if (source.sprite !== undefined && source.sprite !== null) {
+    const value = record(source.sprite, "sprite");
+    sprite = { pet: text(value.pet, "sprite.pet", 64, PET_ID) };
+  }
+
   return {
-    spec: SPEC,
+    spec,
+    sprite,
     id: text(source.id, "id", 81, ID),
     name: text(source.name, "name", 32),
     author: text(source.author, "author", 40),

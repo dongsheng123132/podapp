@@ -366,6 +366,45 @@ button { font: inherit; letter-spacing: 0; }
 .skin-label { min-width: 0; }
 .skin-label b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .skin-check { text-align: center; }
+
+.pet-section { margin-top: 6px; border-top: 1px solid var(--line); }
+.pet-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 14px 2px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.pet-head small { color: var(--dim); font-size: 10px; font-weight: 400; }
+
+/*
+ * 宠物贴图。格子是 192×208（Codex 契约），这里按那个长宽比缩。
+ *
+ * `background-size` 和 `background-position` 由 pet.ts 逐帧写 —— 写在这里会有
+ * 两份定义，而样式表里那份改不动（帧是变的）。这条规则只管**摆哪儿、多大**。
+ */
+.pet {
+  background-repeat: no-repeat;
+  /* 有些宠物是像素风，有些是黏土/毛绒风。默认平滑缩放，像素风那边会糊一点，
+     但反过来（一律 pixelated）会让非像素风的宠物出现锯齿 —— 后者更难看，
+     而且契约明说 pixel / plush / clay / 3D toy 都是合法风格。 */
+  background-color: transparent;
+}
+/* 贴了宠物就不要那个方块底色了 —— 图集是透明底，衬个色块等于给它加了个相框 */
+.boat .pet, .brand-mark.pet { background-color: transparent; }
+.boat .pet { width: 46px; height: 50px; }
+.brand-mark.pet { width: 24px; height: 26px; border-radius: 0; }
+
+/* 列表里的头像固定停在 idle 第一帧（第 0 列第 0 行）—— 契约里那一帧本来
+   就是按「能当静态图用」画的，所以不用另出缩略图。 */
+.pet-thumb {
+  background-repeat: no-repeat;
+  background-size: 800% 900%;
+  background-position: 0% 0%;
+  background-color: transparent;
+}
 .skin-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;

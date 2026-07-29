@@ -423,6 +423,18 @@ fn dock_artifacts() -> Vec<podapp_runtime::artifacts::Artifact> {
     podapp_runtime::artifacts::list()
 }
 
+/// 本机认得的 Codex 宠物 —— 皮肤面板拿它列「能贴谁」。
+///
+/// 只回清单信息，**不回图集字节**：一张几 MB 的图 base64 走 IPC，
+/// 会让「有几只宠物」这个问题变成一次几十 MB 的传输。图走 `podapp://pet/<id>/sprite`。
+#[tauri::command]
+fn dock_pets() -> Vec<serde_json::Value> {
+    podapp_codex::pets::list()
+        .iter()
+        .map(|p| p.to_json())
+        .collect()
+}
+
 /// 命令行里带的 `.pod` 路径。
 ///
 /// 双击 `.pod` 时 Windows 就是把路径当参数拉起我们。**只认 `.pod` 结尾的存在的文件** ——
@@ -471,6 +483,7 @@ pub fn run() {
             dock_developer_prompt,
             dock_skin_prompt,
             dock_artifacts,
+            dock_pets,
         ])
         .setup(|app| {
             let handle = app.handle().clone();

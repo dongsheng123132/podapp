@@ -22,6 +22,18 @@
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 
+/// Codex 的自定义宠物。跟会话记录同一个根目录，所以放在同一个 crate ——
+/// 「`~/.codex` 长什么样」这件事只该有一份定义。
+pub mod pets;
+
+/// `CODEX_HOME` 是**进程级**的，这个 crate 里每一处改它的测试都得抢**同一把**锁。
+///
+/// 两个模块各摆一把 Mutex 等于一把都没有：症状是别人的测试偶发失败，
+/// 而失败信息指向的是它自己（「没有这个会话」），跟真正的原因隔着一整个文件。
+/// 所以锁放在 crate 根上，谁改 `CODEX_HOME` 谁来这里拿。
+#[cfg(test)]
+pub(crate) static CODEX_HOME_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 /// 会话根目录。`CODEX_HOME` 顶掉它 —— 测试靠这个绝不碰用户真实的对话。
 pub fn sessions_root() -> PathBuf {
     if let Ok(p) = std::env::var("CODEX_HOME") {
@@ -257,7 +269,7 @@ pub fn host_action(id: &str, input: Value) -> Result<Value, String> {
 mod tests {
     use super::*;
 
-    static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    use crate::CODEX_HOME_LOCK as SERIAL;
 
     /// 造一个假的 CODEX_HOME，绝不碰用户真实的对话记录。
     fn sandbox(f: impl FnOnce(&Path)) {

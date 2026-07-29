@@ -64,15 +64,21 @@
       <section id="skinPanel" class="subview" hidden>
         <header class="subview-head">
           <button id="skinBack" class="back" type="button" title="返回" aria-label="返回">←</button>
-          <div><b>皮肤</b><span>仅颜色、标记和圆角，不执行第三方代码</span></div>
+          <div><b>皮肤</b><span>颜色、标记、圆角与宠物贴图，不执行第三方代码</span></div>
         </header>
         <div id="skinList" class="skin-list"></div>
+
+        <div class="pet-section">
+          <div class="pet-head">宠物<small id="petHint">读 Codex 的 ~/.codex/pets</small></div>
+          <div id="petList" class="skin-list"></div>
+        </div>
+
         <div class="skin-actions">
           <button id="importSkin" class="secondary" type="button">导入 JSON</button>
           <button id="copySkinPrompt" class="secondary" type="button">交给 AI 制作</button>
           <input id="skinFile" type="file" accept=".json,.dock-skin.json,application/json" hidden />
         </div>
-        <p id="skinStatus" class="hint">兼容 podapp/dock-skin@0.1</p>
+        <p id="skinStatus" class="hint">兼容 podapp/dock-skin@0.1 与 @0.2</p>
       </section>
     </section>
 

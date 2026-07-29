@@ -1,6 +1,6 @@
 //! `podapp://` 协议处理器 —— 把运行时接到 WebView 上。
 //!
-//! 四条路径，全都收敛到 `podapp-runtime`，这里不做第二份实现：
+//! 五条路径，全都收敛到别处，这里不做第二份实现：
 //!
 //! | 路径 | 干什么 |
 //! |---|---|
@@ -8,6 +8,7 @@
 //! | `/app/<pod-id>/<rel>` | 程序舱静态资源（入口页会被注入桥） |
 //! | `/rpc/<pod-id>/<verb>` | 能力调用（POST） |
 //! | `/artifact/<id>` | 产物字节 |
+//! | `/pet/<pet-id>/sprite` | Codex 宠物图集字节 |
 //!
 //! **CSP 由 [`podapp_runtime::perms::csp_for`] 逐个程序舱下发**，不在这里写死。
 //! 写死就意味着「这个程序舱申请了哪些网络源」这件事有两份定义。
@@ -86,6 +87,26 @@ pub fn handle<R: tauri::Runtime>(
         };
     }
 
+    // 宠物图集。**只认 `/pet/<id>/sprite` 这一条**，不做 `/pet/<id>/<任意文件>` ——
+    // 后者等于把宠物目录当静态站点端出去，而那个目录里将来会有什么谁也说不准。
+    if let Some((pet_id, rest)) = split_pod_path(&path, "/pet/") {
+        if rest != "sprite" {
+            return text(404, "宠物只提供 /sprite");
+        }
+        return match podapp_codex::pets::sprite_bytes(pet_id) {
+            Ok((bytes, mime)) => Response::builder()
+                .status(200)
+                .header("content-type", mime)
+                // 图集在宠物的生命周期里不变，但用户可能刚用 hatch-pet 重做了一版。
+                // 让 WebView 每次带条件请求过来，比缓存住一张过时的图强 ——
+                // 「我明明改了它还是老样子」是最难自己排查的一类现象。
+                .header("cache-control", "no-cache")
+                .body(bytes)
+                .unwrap_or_else(|_| Response::new(Vec::new())),
+            Err(e) => text(404, &e),
+        };
+    }
+
     if let Some((pod_id, rel)) = split_pod_path(&path, "/app/") {
         let served = serve::serve(pod_id, rel);
         let is_entry = served.status == 200 && served.mime.starts_with("text/html");
@@ -139,6 +160,20 @@ mod tests {
             Some(("org.x.y", "image.decode"))
         );
         assert_eq!(split_pod_path("/other", "/app/"), None);
+    }
+
+    /// 宠物那条路只开 `/sprite` 一个口子。
+    ///
+    /// 拆出来的第二段必须原样是 `sprite` —— 一旦这里放行了别的尾巴，
+    /// 宠物目录就等于被当成静态站点端出去了，而那个目录里将来会有什么谁也说不准。
+    #[test]
+    fn a_pet_only_exposes_its_sprite() {
+        assert_eq!(split_pod_path("/pet/ember/sprite", "/pet/"), Some(("ember", "sprite")));
+        // 这几种都会被 handle 挡在 404：拆得出来，但第二段不是 sprite
+        for path in ["/pet/ember/pet.json", "/pet/ember", "/pet/ember/a/b"] {
+            let (_, rest) = split_pod_path(path, "/pet/").expect("应当拆得出来");
+            assert_ne!(rest, "sprite", "{path} 不该被当成图集请求");
+        }
     }
 
     #[test]
