@@ -1,0 +1,9 @@
+{
+  "spec": "podapp/flow@0.1",
+  "id": "example.export-chat",
+  "name": "导出最近一次对话",
+  "steps": [
+    { "action": "app.chatlog.session.list", "input": { "limit": 1 } },
+    { "action": "app.chatlog.session.export", "input": { "format": "md" } }
+  ]
+}

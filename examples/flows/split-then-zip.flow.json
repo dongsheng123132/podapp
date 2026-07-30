@@ -1,0 +1,11 @@
+{
+  "spec": "podapp/flow@0.1",
+  "id": "example.split-then-zip",
+  "name": "切九宫格并打包",
+  "steps": [
+    {
+      "action": "app.nine-grid.image.split",
+      "input": { "image": "$in", "rows": 3, "cols": 3, "zip": true }
+    }
+  ]
+}

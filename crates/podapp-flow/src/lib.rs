@@ -269,10 +269,32 @@ pub fn run(
     caps: &Capabilities,
 ) -> Outcome {
     let specs = podapp_runtime::manifest::action_specs();
-    // 上一步的产物：接着跑的时候要从传回来的 results 里捡
-    let mut prev = results.last().and_then(pick_output);
+    // 上一步产出了什么。接着跑的时候，`results` 里带着它。
+    let mut prev: Option<Value> = results
+        .last()
+        .and_then(|r| r.get("prev").cloned())
+        .filter(|v| !v.is_null());
+    let mut prev_count = prev.as_ref().map(|_| 1usize).unwrap_or(0);
 
     for (i, step) in flow.steps.iter().enumerate().skip(from) {
+        // `$prev` 只在上一步**恰好产出一个**产物时有定义。0 个或多个都是没定义的，
+        // **这时不猜**：猜一个（比如挑最新的）会让 `nine-grid` 切出 9 张之后
+        // 悄悄只把其中一张传下去，而那个错要等到人看结果才发现。
+        if i > from.min(i) || i > 0 {
+            if mentions(&step.input, PREV) && prev.is_none() {
+                return Outcome::Failed {
+                    step: i,
+                    action: step.action.clone(),
+                    error: format!(
+                        "第 {} 步要 {PREV}，但上一步产出了 {prev_count} 个产物 —— \
+{PREV} 只在恰好 1 个的时候有定义。把它拆成两条流程，\
+或者让上一步只产出一个（比如别开 zip）。",
+                        i + 1
+                    ),
+                    results,
+                };
+            }
+        }
         let input = substitute(&step.input, seed, prev.as_ref());
         let spec = specs.iter().find(|s| s.id == step.action);
 
@@ -288,11 +310,27 @@ pub fn run(
             };
         }
 
+        // 跑之前记下账本的最新一条，跑完据此算出「这一步产出了什么」
+        let marker = newest_artifact();
         let inv = Invocation::new(&step.action, Value::Object(input));
         match podapp_runtime::headless::invoke(&inv, host, caps, None) {
             Ok(v) => {
-                prev = pick_output(&v);
-                results.push(json!({ "step": i, "action": step.action, "result": v }));
+                let produced = produced_since(marker.as_deref());
+                prev_count = produced.len();
+                // 恰好一个才给 `$prev`。多个的时候留空，让**下一步**报出一条
+                // 说得清的错，而不是在这里挑一个传下去
+                prev = if produced.len() == 1 {
+                    produced.into_iter().next()
+                } else {
+                    None
+                };
+                results.push(json!({
+                    "step": i, "action": step.action, "result": v,
+                    // 带上「这一步产出了什么」和它算出的 prev，
+                    // 好让「点头之后接着跑」那条路拿得回上下文
+                    "produced": prev_count,
+                    "prev": prev,
+                }));
             }
             Err(e) => {
                 return Outcome::Failed {
@@ -307,20 +345,35 @@ pub fn run(
     Outcome::Done { results }
 }
 
-/// 从一步的结果里挑出「能当下一步输入的东西」。
+/// 产物账本最新那一条的 id。跑一步之前记下来，跑完拿它算出「这一步产出了什么」。
+fn newest_artifact() -> Option<String> {
+    podapp_runtime::artifacts::list().first().map(|a| a.id.clone())
+}
+
+/// 从 `marker` 之后新产出的产物路径（最新的在前）。
 ///
-/// 优先产物**引用**（路径 / id），不是内容 —— 把像素往下一步传是这个项目
-/// 明确不做的事（几 MB base64 在步骤之间来回复制，既慢又会撑爆返回值）。
-fn pick_output(step_result: &Value) -> Option<Value> {
-    let v = step_result.get("result").unwrap_or(step_result);
-    for p in ["/artifact/path", "/artifact/id", "/path", "/file"] {
-        if let Some(x) = v.pointer(p) {
-            if !x.is_null() {
-                return Some(x.clone());
-            }
-        }
-    }
-    None
+/// # 为什么查账本，不猜返回值
+///
+/// 第一版是在返回值里找 `/artifact/path`、`/path` 这些字段。**实测下来一个都对不上**：
+/// `nine-grid` 返回的是 `tiles[i].artifact.path` 和 `zip.path`，
+/// `annotate` 返回的是 `overlay`。也就是说每个 Pod 用自己的字段名，
+/// 而猜字段名的后果是 `$prev` 静默变成 `null` —— 下一步收到 null，
+/// 报的错跟真实原因（上一步的字段叫别的名字）隔着好几层。
+///
+/// 产物账本是**权威**的：产物是经 `artifacts::emit` 落盘的，账本记的就是真实发生过的事，
+/// 不依赖任何 Pod 怎么组织自己的返回值。
+fn produced_since(marker: Option<&str>) -> Vec<Value> {
+    let all = podapp_runtime::artifacts::list();
+    let fresh: Vec<_> = match marker {
+        None => all,
+        Some(id) => all.into_iter().take_while(|a| a.id != id).collect(),
+    };
+    fresh
+        .iter()
+        .filter_map(|a| {
+            podapp_runtime::artifacts::path_of(&a.id).map(|p| Value::String(p.display().to_string()))
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -418,17 +471,49 @@ mod tests {
         assert_eq!(out["d"], json!(["PREV", "keep"]));
     }
 
+    /// 「上一步产出了什么」以**产物账本**为准，不是猜返回值里的字段名。
+    ///
+    /// 这条测试换过一次内容。原来它断言的是「优先 /artifact/path，退到 /path」——
+    /// 而实测下来官方 Pod **一个都不长这样**：nine-grid 返回 tiles[i].artifact.path
+    /// 和 zip.path，annotate 返回 overlay。也就是说那条测试断言的是一个
+    /// 现实中不存在的约定，绿着，而 $prev 在真流程里永远是 null。
     #[test]
-    fn output_picking_prefers_references_never_pixels() {
-        let r = json!({ "result": { "message": "ok",
-            "artifact": { "path": "C:/x/a.png", "id": "art_1" } } });
-        assert_eq!(pick_output(&r), Some(json!("C:/x/a.png")));
-        // 只有 id 的时候退到 id
-        let r2 = json!({ "result": { "artifact": { "id": "art_9" } } });
-        assert_eq!(pick_output(&r2), Some(json!("art_9")));
-        // 没有任何引用就是 None —— 绝不退化成「把整个结果塞给下一步」
-        assert_eq!(pick_output(&json!({ "result": { "message": "ok" } })), None);
+    fn what_a_step_produced_comes_from_the_ledger() {
+        static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
+        let dir = std::env::temp_dir().join(format!("podapp-flow-led-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::env::set_var("PODAPP_ARTIFACTS_ROOT", &dir);
+        podapp_runtime::artifacts::clear();
+
+        const PNG: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+        // 账本空的时候，marker 是 None
+        assert!(newest_artifact().is_none());
+        assert!(produced_since(None).is_empty());
+
+        podapp_runtime::artifacts::emit("p", None, "image", PNG, Some("一")).unwrap();
+        let marker = newest_artifact();
+        assert!(marker.is_some());
+        // marker 之后什么都没产出
+        assert!(produced_since(marker.as_deref()).is_empty());
+
+        // 再产两个：从 marker 数应当正好是 2，而且给的是**路径**不是内容
+        podapp_runtime::artifacts::emit("p", None, "image", PNG, Some("二")).unwrap();
+        podapp_runtime::artifacts::emit("p", None, "image", PNG, Some("三")).unwrap();
+        let fresh = produced_since(marker.as_deref());
+        assert_eq!(fresh.len(), 2, "{fresh:?}");
+        for f in &fresh {
+            let s = f.as_str().expect("该是路径字符串");
+            assert!(std::path::Path::new(s).exists(), "路径不存在: {s}");
+            assert!(!s.contains("iVBORw0"), "把内容当引用传下去了");
+        }
+
+        std::env::remove_var("PODAPP_ARTIFACTS_ROOT");
+        let _ = std::fs::remove_dir_all(&dir);
     }
+
 
     /// 要确认的动作必须**在跑之前**停下。
     ///

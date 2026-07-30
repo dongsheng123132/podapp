@@ -1,0 +1,15 @@
+{
+  "spec": "podapp/flow@0.1",
+  "id": "example.crop-then-recut",
+  "name": "先取整张再切四格",
+  "steps": [
+    {
+      "action": "app.nine-grid.image.split",
+      "input": { "image": "$in", "rows": 1, "cols": 1, "gap": 24 }
+    },
+    {
+      "action": "app.nine-grid.image.split",
+      "input": { "image": "$prev", "rows": 2, "cols": 2 }
+    }
+  ]
+}
