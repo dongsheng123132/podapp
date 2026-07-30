@@ -33,6 +33,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
+        "https://u-claw.org.cn/podapp/latest.json",
         "https://podapp.net/latest.json",
         "https://github.com/dongsheng123132/podapp/releases/latest/download/latest.json"
       ],
