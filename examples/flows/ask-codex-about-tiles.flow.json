@@ -1,0 +1,11 @@
+{
+  "spec": "podapp/flow@0.1",
+  "id": "example.ask-codex-about-tiles",
+  "name": "切图后交给 Codex 看",
+  "steps": [
+    {
+      "action": "app.nine-grid.image.split",
+      "input": { "image": "$in", "rows": 1, "cols": 2 }
+    }
+  ]
+}

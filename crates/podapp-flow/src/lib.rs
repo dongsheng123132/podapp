@@ -47,8 +47,18 @@
 use podapp_runtime::{Capabilities, HostBridge, Invocation};
 use serde_json::{json, Map, Value};
 
-/// 上一步的产物。
+/// 上一步的产物 —— **恰好一个**时才有定义。
 pub const PREV: &str = "$prev";
+/// 上一步产出的**全部**产物，换成一个数组。
+///
+/// 有它是因为「输入是一个还是多个」正是组合的关键：`nine-grid` 切出 9 张，
+/// 下一步想把 9 张一起喂给别人（打包、或者全部交给 Codex 看），
+/// 用 `$prev` 就只能报错。`$prev[]` 把这种情况变成可表达的，而不是绕开的。
+///
+/// **和 `$prev` 分成两个记号，不做「一个时给单值、多个时给数组」的自动切换** ——
+/// 那样同一份流程会因为图片被切成几张而走不同的分支，
+/// 而作者根本没打算表达那个意思。
+pub const PREV_ALL: &str = "$prev[]";
 /// 调用方喂进来的输入（用户拖进浮舱的那个东西）。
 pub const IN: &str = "$in";
 
@@ -162,6 +172,7 @@ pub fn check(flow: &Flow) -> Vec<String> {
     problems
 }
 
+/// 输入里提到某个记号了吗。
 fn mentions(input: &Map<String, Value>, token: &str) -> bool {
     input.values().any(|v| match v {
         Value::String(s) => s == token,
@@ -174,11 +185,20 @@ fn mentions(input: &Map<String, Value>, token: &str) -> bool {
 ///
 /// 只认**整个值恰好是**这两个记号，不做字符串内插值 ——
 /// 内插会让「$prev.png」这种写法看起来能用，而它的含义是模糊的。
-fn substitute(input: &Map<String, Value>, seed: Option<&Value>, prev: Option<&Value>) -> Map<String, Value> {
+fn substitute(
+    input: &Map<String, Value>,
+    seed: Option<&Value>,
+    prev: Option<&Value>,
+    all: &[Value],
+) -> Map<String, Value> {
     let swap = |v: &Value| -> Value {
         match v.as_str() {
             Some(IN) => seed.cloned().unwrap_or(Value::Null),
             Some(PREV) => prev.cloned().unwrap_or(Value::Null),
+            // 0 个时给空数组而不是 null：下游拿到 `[]` 能自己判断
+            // 「没东西可处理」，拿到 null 只会在参数校验那里报一句
+            // 跟原因无关的错
+            Some(PREV_ALL) => Value::Array(all.to_vec()),
             _ => v.clone(),
         }
     };
@@ -275,6 +295,11 @@ pub fn run(
         .and_then(|r| r.get("prev").cloned())
         .filter(|v| !v.is_null());
     let mut prev_count = prev.as_ref().map(|_| 1usize).unwrap_or(0);
+    // `$prev[]` 用的全部产物。接着跑时从 results 里捡回来。
+    let mut prev_all: Vec<Value> = results
+        .last()
+        .and_then(|r| r.get("producedPaths").and_then(|v| v.as_array()).cloned())
+        .unwrap_or_default();
 
     for (i, step) in flow.steps.iter().enumerate().skip(from) {
         // `$prev` 只在上一步**恰好产出一个**产物时有定义。0 个或多个都是没定义的，
@@ -295,7 +320,7 @@ pub fn run(
                 };
             }
         }
-        let input = substitute(&step.input, seed, prev.as_ref());
+        let input = substitute(&step.input, seed, prev.as_ref(), &prev_all);
         let spec = specs.iter().find(|s| s.id == step.action);
 
         // 要确认的先停。**在跑之前停**，不是跑完再问 ——
@@ -317,6 +342,7 @@ pub fn run(
             Ok(v) => {
                 let produced = produced_since(marker.as_deref());
                 prev_count = produced.len();
+                prev_all = produced.clone();
                 // 恰好一个才给 `$prev`。多个的时候留空，让**下一步**报出一条
                 // 说得清的错，而不是在这里挑一个传下去
                 prev = if produced.len() == 1 {
@@ -330,6 +356,8 @@ pub fn run(
                     // 好让「点头之后接着跑」那条路拿得回上下文
                     "produced": prev_count,
                     "prev": prev,
+                    // `$prev[]` 接着跑时要能捡回来
+                    "producedPaths": prev_all,
                 }));
             }
             Err(e) => {
@@ -461,7 +489,7 @@ mod tests {
         input.insert("b".into(), json!(PREV));
         input.insert("c".into(), json!("$prev.png"));
         input.insert("d".into(), json!([PREV, "keep"]));
-        let out = substitute(&input, Some(&json!("SEED")), Some(&json!("PREV")));
+        let out = substitute(&input, Some(&json!("SEED")), Some(&json!("PREV")), &[]);
 
         assert_eq!(out["a"], json!("SEED"));
         assert_eq!(out["b"], json!("PREV"));
