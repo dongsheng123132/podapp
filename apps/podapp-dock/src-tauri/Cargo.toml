@@ -43,6 +43,9 @@ podapp-zip = { path = "../../../crates/podapp-zip" }
 # MCP 桥：浮舱只用它数一下「接上之后 AI 多了几件能做的事」，
 # 真正的服务进程是随身带的 sidecar，不在这里跑。
 podapp-mcp = { path = "../../../crates/podapp-mcp" }
+# 调本机已装的命令行工具：同样是宿主动作，逐条申报。
+# 白名单在这个 crate 里，程序舱申报什么都越不出去。
+podapp-cli = { path = "../../../crates/podapp-cli" }
 tauri-plugin-updater = "2.10.1"
 tauri-plugin-process = "2.3.1"
 

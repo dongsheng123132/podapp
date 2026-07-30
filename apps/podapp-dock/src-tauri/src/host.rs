@@ -56,6 +56,12 @@ impl HostBridge for DockHost {
         if id.starts_with("host.zip.") {
             return podapp_zip::host_action(id, input);
         }
+        // 本机已装的命令行工具。**注意这不是"接 AI"** —— 红线挡的是接入
+        // （带 SDK、管密钥、背计费）；调用用户自己装好、自己配好的工具，
+        // 密钥是他的、账号是他的，我们一个依赖都不引。
+        if id.starts_with("host.cli.") {
+            return podapp_cli::host_action(id, input);
+        }
         Err(format!("capability_unavailable: 浮舱没有宿主动作 {id}"))
     }
 }

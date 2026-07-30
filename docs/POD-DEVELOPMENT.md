@@ -115,6 +115,50 @@ html, body { margin: 0; height: 100%; background: transparent; }
 宿主按窗口标签核对归属，传别人的 id 会被 `window_denied` 拒掉。
 窗口操作不进 `permissions`：申报「我要能移动我自己」是没有意义的一条。
 
+## 给终端工具装个面：`host.cli.*`
+
+最好用的工具里有一大批只有终端界面。它们缺的不是功能，是**一个能瞥一眼的面**。
+浮舱贴在 AI CLI 旁边，最该回答的问题是「它刚改了什么」—— 那就是 `git status`。
+
+```json
+"permissions": { "host_actions": ["host.cli.git"] }
+```
+
+```js
+// actions.mjs —— 表达意图，不表达命令
+export const actions = {
+  "app.mytool.repo.status": async ({ input }, ctx) =>
+    ctx.pod.action("host.cli.git", { op: "status", cwd: input.dir }),
+};
+```
+
+### 四条规矩（照着做，不然装不上或跑不通）
+
+**1. 意图在程序舱，argv 在宿主。** 你传 `op: "status"`，命令行怎么拼由宿主决定。
+**没有传 argv 的口子**，这是故意的：`git` 光靠参数就能改配置、跑外部 diff 程序、
+走别名 —— 放开 argv 等于放开任意命令执行。想要新的 op，去宿主那侧加，不是在这里绕。
+
+**2. 有哪些程序由宿主定。** 申报 `host.cli.git` 能用；申报 `host.cli.rm` 只会拿到
+`capability_unavailable`。白名单在宿主一侧，清单里写什么都越不出去。
+
+**3. 不经 shell。** 宿主只用 argv 数组，永远不拼字符串给 `cmd` / `sh`。
+你也不该指望管道、重定向、`&&` 这些 —— 它们属于 shell，不属于这条路。
+
+**4. 命令跑失败不是调用失败。** 结果里带 `exit` / `stdout` / `stderr` / `truncated`，
+非零退出照样正常返回 —— 由你判断怎么呈现。**别把非零退出当异常抛给用户看**，
+`git log` 在空仓库里就是非零的。
+
+现有的 op（`host.cli.git`）：
+
+| op | 给你什么 | 说明 |
+|---|---|---|
+| `status` | `--porcelain=v1 --branch` | 稳定的机器格式，跨版本承诺不变 |
+| `diff` | `--stat` | 只要统计，不要整份补丁（整份 diff 该走 artifact） |
+| `log` | `%h\t%an\t%ad\t%s`，`limit` 条（1–200，默认 20） | 制表符分隔，好切 |
+
+输入必须给 `cwd`，而且是**已存在的绝对路径**。超时 10 秒，输出上限 1 MB
+（截断时 `truncated: true`，不会静默切掉）。
+
 ## 完成标准
 
 在 PodApp Protocol CLI 所在仓库执行：

@@ -1,0 +1,12 @@
+[package]
+name = "podapp-cli"
+version = "0.1.0"
+description = "把本机已装的命令行工具端给程序舱 —— 意图在程序舱，argv 在宿主，不经 shell"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# 一个第三方依赖都不引：std::process 就够。
+# 这个 crate 是可插拔能力，它的依赖数不该影响核心。
+serde_json.workspace = true

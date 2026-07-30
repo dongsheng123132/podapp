@@ -209,6 +209,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "podapp-cli"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "podapp-codex"
 version = "0.1.0"
 dependencies = [
