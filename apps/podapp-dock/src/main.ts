@@ -49,6 +49,25 @@ type DockPlacement = {
   height: number;
 };
 
+/** 一条流程验完之后的样子。跟 Rust 侧 `dock_flow_check` 一一对应。 */
+type FlowPlan = {
+  id: string;
+  name: string;
+  problems: string[];
+  steps: { action: string; title: string; confirm: boolean; input: unknown }[];
+};
+
+/** 跑到哪儿了。形状由 `podapp_flow::Outcome::to_json` 决定 —— 只有一份定义。 */
+type FlowOutcome = {
+  state: "done" | "needs_confirm" | "failed";
+  step?: number;
+  action?: string;
+  title?: string;
+  error?: string;
+  resumeFrom?: number;
+  results: unknown[];
+};
+
 /** MCP 桥的现状。跟 Rust 侧 `dock_mcp` 一一对应。 */
 type McpInfo = {
   present: boolean;
@@ -66,7 +85,7 @@ type PetSummary = {
   bytes: number;
 };
 
-type View = "home" | "developer" | "skins" | "mcp";
+type View = "home" | "developer" | "skins" | "mcp" | "flow";
 
 const POSITION_KEY = "podapp.dock-position.v1";
 const ACTIVE_SKIN_KEY = "podapp.active-skin.v1";
@@ -107,6 +126,12 @@ const mcpState = $<HTMLParagraphElement>("mcpState");
 const mcpPath = $<HTMLElement>("mcpPath");
 const mcpStatus = $<HTMLParagraphElement>("mcpStatus");
 const mcpSub = $<HTMLElement>("mcpSub");
+const flowPanel = $<HTMLElement>("flowPanel");
+const flowJson = $<HTMLTextAreaElement>("flowJson");
+const flowSteps = $<HTMLDivElement>("flowSteps");
+const flowStatus = $<HTMLParagraphElement>("flowStatus");
+const flowConfirm = $<HTMLDivElement>("flowConfirm");
+const flowConfirmText = $<HTMLParagraphElement>("flowConfirmText");
 const petHint = $<HTMLElement>("petHint");
 const boatMark = $<HTMLSpanElement>("boatMark");
 const brandMark = $<HTMLSpanElement>("brandMark");
@@ -115,6 +140,8 @@ const appWindow = getCurrentWindow();
 let activeView: View = "home";
 let developerPrompt = "";
 let skinPrompt = "";
+let flowPrompt = "";
+let flowLastOutcome: FlowOutcome | null = null;
 let customSkins = loadCustomSkins();
 let activeSkinId = localStorage.getItem(ACTIVE_SKIN_KEY) ?? builtinSkins[0].id;
 let cachedWindow = { x: 0, y: 0, scale: 1, ready: false };
@@ -317,6 +344,7 @@ function setView(view: View, expanded: boolean) {
   developerPanel.hidden = !expanded || view !== "developer";
   skinPanel.hidden = !expanded || view !== "skins";
   mcpPanel.hidden = !expanded || view !== "mcp";
+  flowPanel.hidden = !expanded || view !== "flow";
 }
 
 function setEdgeClass(element: HTMLElement, placement: string, edge: string | null) {
@@ -566,6 +594,131 @@ $("skins").onclick = () => {
 };
 $("skinBack").onclick = () => setView("home", true);
 $("mcpBack").onclick = () => setView("home", true);
+$("flowBack").onclick = () => setView("home", true);
+$("flow").onclick = () => {
+  setView("flow", true);
+  flowStatus.textContent = "要新能力才做 Pod；组合已有动作用流程。";
+};
+
+let flowPlan: FlowPlan | null = null;
+let flowResults: unknown[] = [];
+
+/** 把每一步画出来。`mark` 决定第 i 步显示成什么状态。 */
+function renderFlowSteps(mark: (i: number) => string) {
+  if (!flowPlan) return flowSteps.replaceChildren();
+  flowSteps.replaceChildren(...flowPlan.steps.map((s, i) => {
+    const row = document.createElement("div");
+    row.className = `flow-step ${mark(i)}`;
+    const n = document.createElement("i");
+    n.textContent = String(i + 1);
+    const label = document.createElement("span");
+    const b = document.createElement("b");
+    // 没装的动作没有标题 —— 那就把动作 ID 显出来，别显示一个空行
+    b.textContent = s.title || s.action;
+    const sub = document.createElement("small");
+    sub.textContent = s.confirm ? `${s.action} · 要确认` : s.action;
+    label.append(b, sub);
+    row.append(n, label);
+    return row;
+  }));
+}
+
+/** 读文本框里那份 JSON。**解析错要说人话** —— 小白粘错一个逗号最常见。 */
+function readFlow(): unknown | null {
+  try {
+    return JSON.parse(flowJson.value);
+  } catch (e) {
+    flowStatus.textContent = `这不是一份能读的 JSON：${(e as Error).message}`;
+    flowSteps.replaceChildren();
+    return null;
+  }
+}
+
+async function checkFlow(): Promise<boolean> {
+  const flow = readFlow();
+  if (!flow) return false;
+  try {
+    flowPlan = await invoke<FlowPlan>("dock_flow_check", { flow });
+  } catch (error) {
+    flowPlan = null;
+    flowSteps.replaceChildren();
+    flowStatus.textContent = String(error);
+    return false;
+  }
+  renderFlowSteps(() => "");
+  if (flowPlan.problems.length) {
+    // 一次全列出来。原样贴回给 AI 就能一轮改完，比一条一条挤有用
+    flowStatus.textContent = flowPlan.problems.join(String.fromCharCode(10));
+    return false;
+  }
+  flowStatus.textContent = `${flowPlan.name} · ${flowPlan.steps.length} 步，可以跑`;
+  return true;
+}
+
+function showOutcome(o: FlowOutcome) {
+  flowLastOutcome = o;
+  flowResults = o.results ?? [];
+  const stopped = o.step ?? -1;
+  renderFlowSteps((i) => {
+    if (o.state === "needs_confirm" && i === stopped) return "confirm";
+    if (o.state === "failed" && i === stopped) return "bad";
+    return i < stopped || o.state === "done" ? "ok" : "";
+  });
+
+  if (o.state === "needs_confirm") {
+    flowConfirm.hidden = false;
+    flowConfirmText.textContent =
+      `第 ${stopped + 1} 步「${o.title || o.action}」声明了要确认。跑之前先给你看一眼。`;
+    flowStatus.textContent = "等你点头";
+    return;
+  }
+  flowConfirm.hidden = true;
+  flowStatus.textContent = o.state === "done"
+    ? `跑完了 · ${flowResults.length} 步有结果`
+    : `第 ${stopped + 1} 步失败：${o.error}`;
+}
+
+async function runFlow(from: number) {
+  const flow = readFlow();
+  if (!flow) return;
+  flowConfirm.hidden = true;
+  flowStatus.textContent = "跑着…";
+  try {
+    const o = await invoke<FlowOutcome>("dock_flow_run", {
+      flow,
+      seed: null,
+      from,
+      results: from === 0 ? [] : flowResults,
+    });
+    showOutcome(o);
+  } catch (error) {
+    flowStatus.textContent = String(error);
+  }
+}
+
+$("flowCheck").onclick = () => { checkFlow(); };
+$("flowRun").onclick = async () => {
+  flowResults = [];
+  if (await checkFlow()) runFlow(0);
+};
+$("flowYes").onclick = () => {
+  // 点头之后从**宿主算好的**那一步接着跑，不在界面这边 +1 —— 算错会跳过或重跑一步
+  const o = flowLastOutcome;
+  if (o?.resumeFrom !== undefined) runFlow(o.resumeFrom);
+};
+$("flowNo").onclick = () => {
+  flowConfirm.hidden = true;
+  flowStatus.textContent = "停下了，前面几步的结果还在收件箱里";
+};
+$("copyFlowPrompt").onclick = async () => {
+  try {
+    flowPrompt ||= await invoke<string>("dock_flow_prompt");
+    await writeClipboard(flowPrompt);
+    flowStatus.textContent = "规范已复制 —— 把你的需求说给 AI，它给你一段 JSON";
+  } catch (error) {
+    flowStatus.textContent = String(error);
+  }
+};
 
 /**
  * 「接到 AI」。
@@ -664,6 +817,17 @@ listen<string[]>("dock://dropped", async (event) => {
       } catch (error) {
         // 尺寸不对那类错误是**有用的信息**（要 1536×1872，这张是多少），
         // 原样让用户看到，别包成一句「安装失败」
+        warn(error);
+      }
+      continue;
+    }
+    if (lower.endsWith(".flow.json")) {
+      // 拖进来直接填好并验一遍 —— 让人少一步「复制粘贴」
+      try {
+        flowJson.value = await invoke<string>("dock_read_text", { path });
+        setView("flow", true);
+        await checkFlow();
+      } catch (error) {
         warn(error);
       }
       continue;

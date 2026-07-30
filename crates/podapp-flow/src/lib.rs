@@ -218,6 +218,41 @@ pub enum Outcome {
     },
 }
 
+impl Outcome {
+    /// 端给界面 / MCP 的形状。
+    ///
+    /// **放在这里而不是各调用方各写一份**：浮舱和 MCP 都要读它，两处各拼一遍
+    /// 迟早会一处认得 `needs_confirm` 另一处认 `needsConfirm`，
+    /// 而那种不一致只在「刚好走到确认那一步」时才暴露。
+    pub fn to_json(&self) -> Value {
+        match self {
+            Outcome::Done { results } => json!({ "state": "done", "results": results }),
+            Outcome::NeedsConfirm {
+                step,
+                action,
+                title,
+                input,
+                results,
+            } => json!({
+                "state": "needs_confirm",
+                "step": step, "action": action, "title": title,
+                "input": input, "results": results,
+                // 点头之后从这儿接着跑，省得调用方自己去 +1（算错就会跳过或重跑一步）
+                "resumeFrom": step + 1,
+            }),
+            Outcome::Failed {
+                step,
+                action,
+                error,
+                results,
+            } => json!({
+                "state": "failed",
+                "step": step, "action": action, "error": error, "results": results,
+            }),
+        }
+    }
+}
+
 /// 跑一条工作流。
 ///
 /// `from` 是起步的下标（0 开始）。停在确认那一步之后，调用方点头就用
@@ -307,6 +342,24 @@ mod tests {
         // input 给成数组：取字段会静默拿不到，必须在门口拦
         let e = parse(&flow_json(json!([{ "action": "a.b.c.d", "input": [1, 2] }]))).unwrap_err();
         assert!(e.contains("必须是对象"), "{e}");
+    }
+
+    /// 界面和 MCP 读的是同一份形状，而「点头之后从哪儿接着跑」不该让调用方自己算 ——
+    /// 算错就会跳过一步或者重跑一步，而两种都不报错。
+    #[test]
+    fn the_json_shape_says_where_to_resume() {
+        let o = Outcome::NeedsConfirm {
+            step: 2,
+            action: "app.x.y.z".into(),
+            title: "危险".into(),
+            input: json!({}),
+            results: vec![],
+        };
+        let v = o.to_json();
+        assert_eq!(v["state"], "needs_confirm");
+        assert_eq!(v["step"], 2);
+        assert_eq!(v["resumeFrom"], 3);
+        assert_eq!(Outcome::Done { results: vec![] }.to_json()["state"], "done");
     }
 
     #[test]

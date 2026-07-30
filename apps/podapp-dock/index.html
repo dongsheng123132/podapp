@@ -39,6 +39,10 @@
             <span aria-hidden="true">＋</span>
             <span><b>制作 Pod</b><small>把开发规范交给 AI</small></span>
           </button>
+          <button id="flow" class="developer-launch" type="button">
+            <span aria-hidden="true">⛓</span>
+            <span><b>跑一条流程</b><small>把几步串起来一键跑</small></span>
+          </button>
           <button id="mcp" class="developer-launch" type="button">
             <span aria-hidden="true">⇄</span>
             <span><b>接到 AI</b><small id="mcpSub">让 AI 直接调这些动作</small></span>
@@ -63,6 +67,29 @@
         </div>
         <button id="copyDeveloperPrompt" class="primary" type="button">复制完整开发指令</button>
         <p id="copyStatus" class="hint">复制后修改第一行需求。</p>
+      </section>
+
+      <section id="flowPanel" class="subview" hidden>
+        <header class="subview-head">
+          <button id="flowBack" class="back" type="button" title="返回" aria-label="返回">←</button>
+          <div><b>流程</b><span>只串已装的动作，不含代码</span></div>
+        </header>
+        <textarea id="flowJson" class="flow-json" spellcheck="false"
+          placeholder='粘一份流程 JSON，或把 .flow.json 拖进浮舱'></textarea>
+        <div class="skin-actions">
+          <button id="flowCheck" class="secondary" type="button">检查</button>
+          <button id="flowRun" class="secondary" type="button">跑</button>
+        </div>
+        <div id="flowSteps" class="flow-steps"></div>
+        <div id="flowConfirm" class="flow-confirm" hidden>
+          <p id="flowConfirmText"></p>
+          <div class="skin-actions">
+            <button id="flowYes" class="secondary" type="button">确认这一步</button>
+            <button id="flowNo" class="secondary" type="button">停下</button>
+          </div>
+        </div>
+        <button id="copyFlowPrompt" class="secondary flow-prompt" type="button">交给 AI 串一条</button>
+        <p id="flowStatus" class="hint">要新能力才做 Pod；组合已有动作用流程。</p>
       </section>
 
       <section id="mcpPanel" class="subview" hidden>

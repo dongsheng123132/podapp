@@ -386,6 +386,82 @@ async fn dock_open_pod(app: tauri::AppHandle, id: String) -> Result<(), String> 
     Ok(())
 }
 
+/// 读一个小文本文件，给界面填流程用。
+///
+/// **只收 `.flow.json`，而且有大小上限。** 做成通用的「读任意文件」会让界面这条路
+/// 变成一个文件读取器 —— 那不是它该有的能力，而且用户拖错一个 20GB 的文件
+/// 会让浮舱当场卡死。
+#[tauri::command]
+fn dock_read_text(path: String) -> Result<String, String> {
+    let p = std::path::Path::new(&path);
+    if !path.to_ascii_lowercase().ends_with(".flow.json") {
+        return Err("只读 .flow.json".into());
+    }
+    let size = std::fs::metadata(p).map_err(|e| e.to_string())?.len();
+    if size > 256 * 1024 {
+        return Err(format!("流程文件太大（{size} 字节，上限 256KB）"));
+    }
+    std::fs::read_to_string(p).map_err(|e| e.to_string())
+}
+
+/// 验一条流程。**跑之前先说清所有问题** —— 小白拿到「第 2 步那个动作你没装」
+/// 比拿到「运行失败」有用得多。
+#[tauri::command]
+fn dock_flow_check(flow: Value) -> Result<Value, String> {
+    let f = podapp_flow::parse(&flow)?;
+    let problems = podapp_flow::check(&f);
+    Ok(serde_json::json!({
+        "id": f.id,
+        "name": f.name,
+        "problems": problems,
+        // 每步都带上标题，界面才能显示「这一步要干什么」而不是一串动作 ID
+        "steps": f.steps.iter().map(|s| {
+            let spec = podapp_runtime::manifest::action_specs()
+                .into_iter().find(|x| x.id == s.action);
+            serde_json::json!({
+                "action": s.action,
+                "title": spec.as_ref().map(|x| x.title.clone()).unwrap_or_default(),
+                // 要确认的步骤在界面上该提前标出来，别等跑到那儿才让人惊讶
+                "confirm": spec.as_ref().is_some_and(|x| x.confirmation != "never"),
+                "input": s.input,
+            })
+        }).collect::<Vec<_>>(),
+    }))
+}
+
+/// 跑一条流程（或从某一步接着跑）。
+///
+/// 遇到声明了要确认的动作就**停在它前面**返回，界面弹确认，用户点头后用
+/// `resumeFrom` 再调一次。确认这件事绝不在这里代替用户做。
+#[tauri::command]
+fn dock_flow_run(
+    flow: Value,
+    seed: Option<Value>,
+    from: usize,
+    results: Vec<Value>,
+) -> Result<Value, String> {
+    let f = podapp_flow::parse(&flow)?;
+    // 跑之前再验一遍：界面可能没点「检查」就直接点了「跑」
+    let problems = podapp_flow::check(&f);
+    if !problems.is_empty() {
+        return Err(problems.join("；"));
+    }
+    let outcome = podapp_flow::run(
+        &f,
+        seed.as_ref(),
+        from,
+        results,
+        &host::DockHost,
+        &capabilities(),
+    );
+    Ok(outcome.to_json())
+}
+
+#[tauri::command]
+fn dock_flow_prompt() -> &'static str {
+    include_str!("../../../../docs/FLOW-DEVELOPMENT.md")
+}
+
 #[tauri::command]
 fn dock_developer_prompt() -> &'static str {
     include_str!("../../../../docs/POD-DEVELOPMENT.md")
@@ -627,6 +703,10 @@ pub fn run() {
             dock_skin_prompt,
             dock_artifacts,
             dock_pets,
+            dock_read_text,
+            dock_flow_check,
+            dock_flow_run,
+            dock_flow_prompt,
             dock_install_pet,
             dock_mcp,
         ])

@@ -434,3 +434,54 @@ button { font: inherit; letter-spacing: 0; }
      380px 宽的面板里，横滚等于把路径藏起来 */
   word-break: break-all;
 }
+
+/* 流程面板。**刻意不做可视化编排器** —— 那是另一个产品，而且小白也不需要：
+   他要的是「AI 给我一段，我点一下跑完」。粘贴 + 逐步显示就够。 */
+.flow-json {
+  display: block;
+  width: calc(100% - 20px);
+  height: 96px;
+  margin: 8px 10px 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--fg);
+  font: 10px/1.5 ui-monospace, Consolas, monospace;
+  resize: vertical;
+}
+
+.flow-steps { padding: 4px 10px; }
+.flow-step {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 8px;
+  padding: 7px 2px;
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+}
+.flow-step i {
+  width: 18px; height: 18px;
+  display: grid; place-items: center;
+  border: 1px solid var(--line); border-radius: 50%;
+  color: var(--dim); font: normal 9px/1 system-ui;
+}
+.flow-step b { display: block; font-weight: 550; }
+.flow-step small {
+  display: block; color: var(--dim); font-size: 9px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* 跑过的、要确认的、出错的，一眼分得开 */
+.flow-step.ok i { color: var(--success); border-color: var(--success); }
+.flow-step.confirm i { color: var(--accent); border-color: var(--accent); }
+.flow-step.bad i,
+.flow-step.bad b { color: var(--bad); }
+
+.flow-confirm {
+  margin: 8px 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+}
+.flow-confirm p { margin: 0 0 8px; font-size: 11px; }
+.flow-prompt { width: calc(100% - 20px); margin: 8px 10px 0; }

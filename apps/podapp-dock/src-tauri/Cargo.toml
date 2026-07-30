@@ -46,6 +46,8 @@ podapp-mcp = { path = "../../../crates/podapp-mcp" }
 # 调本机已装的命令行工具：同样是宿主动作，逐条申报。
 # 白名单在这个 crate 里，程序舱申报什么都越不出去。
 podapp-cli = { path = "../../../crates/podapp-cli" }
+# 工作流：把已装动作按顺序串起来。它不新增执行路径，只是按顺序调 headless::invoke。
+podapp-flow = { path = "../../../crates/podapp-flow" }
 tauri-plugin-updater = "2.10.1"
 tauri-plugin-process = "2.3.1"
 
