@@ -145,7 +145,17 @@ fn env_var(suffix: &str) -> Option<String> {
 }
 
 /// 宿主家目录，如 `~/.podapp`。
+///
+/// `<PREFIX>_HOME` 能顶掉它。**这一条是补上来的**：原来只有 `APPS_ROOT` 和
+/// `ARTIFACTS_ROOT` 可以改道，`home()` 一律指真实家目录 —— 于是任何**新**的
+/// 家目录子目录（宠物就是第一个）在隔离测试里会照样写进用户真实的 `~/.podapp`。
+/// 我验宠物那轮就差点栽在这：`PODAPP_APPS_ROOT` 设了，宠物却还是落在真目录。
+///
+/// 加在这里而不是给宠物单开一个 `PETS_ROOT`：**下一个子目录不该再踩一遍**。
 pub fn home() -> PathBuf {
+    if let Some(p) = env_var("HOME") {
+        return PathBuf::from(p);
+    }
     let home = std::env::var("USERPROFILE")
         .or_else(|_| std::env::var("HOME"))
         .unwrap_or_else(|_| ".".into());
@@ -243,6 +253,32 @@ fn is_reserved_name(s: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 家目录能被环境变量改道。
+    ///
+    /// 这条守的是**隔离**：`home()` 下面会长出新的子目录（宠物已经是第一个），
+    /// 而每长一个就要能在测试和自检里改道，否则会写进用户真实的 `~/.podapp`。
+    /// 原来只有 `APPS_ROOT` / `ARTIFACTS_ROOT` 能改，宠物那轮就差点写到真目录去。
+    #[test]
+    fn home_can_be_redirected_for_isolation() {
+        // 改进程级环境变量，跟别的测试抢同一份状态 —— 锁在代码里，
+        // 不靠 `--test-threads=1`（需要特殊参数才能过的测试是陷阱）
+        static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
+        let real = home();
+        let fake = std::env::temp_dir().join("podapp-home-redirect-test");
+        std::env::set_var("PODAPP_HOME", &fake);
+        let redirected = home();
+        std::env::remove_var("PODAPP_HOME");
+
+        assert_eq!(redirected, fake, "PODAPP_HOME 没顶掉家目录");
+        assert_eq!(home(), real, "环境变量撤掉后该回到真实家目录");
+        // 子目录跟着走，否则改道只改了一半 —— 那比不改更难查
+        std::env::set_var("PODAPP_HOME", &fake);
+        assert!(apps_root().starts_with(&fake));
+        std::env::remove_var("PODAPP_HOME");
+    }
 
     #[test]
     fn version_compare() {

@@ -29,14 +29,32 @@ fn split_pod_path<'a>(path: &'a str, prefix: &str) -> Option<(&'a str, &'a str)>
     }
 }
 
-/// 这扇 webview 是不是那个程序舱自己的窗。
+/// 这次请求是不是那个程序舱**自己**发的。
 ///
-/// 抽成纯函数是因为它是 `/win/` 这条路上**唯一**会悄悄失效的地方：
-/// 一旦窗口标签的拼法在别处改了而这里没跟上，判断会一律变成 false（还好）
-/// 或者一律变成 true（灾难），而两种都不报错。实机跑一次只能证明"今天对"。
-fn owns_window(pod_slug: &str, webview_label: &str) -> bool {
-    // 标签由宿主建窗时定（`dock_open_pod` 里的 `pod-{slug}`），页面改不了它
+/// 路径里的 pod-id 是页面自己填的字符串，谁都能改；`webview_label` 由宿主建窗时
+/// 定下（`dock_open_pod` 里的 `pod-{slug}`），页面碰不到。所以身份只认标签。
+///
+/// **这不只是窗口的事。** `/rpc/` 原来直接信路径里的 id，而那个 id 一路传到
+/// `perms::permits(pod_id, cap)` 和 `data_dir(pod_id)` —— 也就是说 A 舱的页面
+/// `fetch("/rpc/<B的id>/storage.get")` 查的是 B 的清单、读的是 B 的目录，
+/// A 自己什么权限都不用申请。`storage.set` 还能覆盖 B 的数据。
+///
+/// 抽成纯函数是因为它是这条路上**唯一**会悄悄失效的地方：拼法在别处改了而这里
+/// 没跟上，判断会一律 false（还好）或一律 true（灾难），两种都不报错。
+fn is_own_surface(pod_slug: &str, webview_label: &str) -> bool {
     !pod_slug.is_empty() && format!("pod-{pod_slug}") == webview_label
+}
+
+/// 核对请求方身份，不对就给出能照着查的拒绝。
+fn deny_unless_own(pod_id: &str, webview_label: &str) -> Option<Response<Vec<u8>>> {
+    let ok = manifest::get(pod_id)
+        .map(|info| is_own_surface(&info.slug, webview_label))
+        .unwrap_or(false);
+    (!ok).then(|| {
+        json_result(Err(format!(
+            "identity_denied: {webview_label} 不是 {pod_id}，不能替它调用"
+        )))
+    })
 }
 
 fn text(status: u16, body: &str) -> Response<Vec<u8>> {
@@ -81,6 +99,11 @@ pub fn handle<R: tauri::Runtime>(
         if verb.is_empty() {
             return text(400, "rpc 缺少动词");
         }
+        // 身份先核，再谈权限。**顺序不能反** —— 先按路径里的 id 查权限，
+        // 查的就已经是别人的清单了。
+        if let Some(denied) = deny_unless_own(pod_id, ctx.webview_label()) {
+            return denied;
+        }
         let args: serde_json::Value =
             serde_json::from_slice(req.body()).unwrap_or(serde_json::Value::Null);
         let host = crate::host::DockHost;
@@ -96,14 +119,8 @@ pub fn handle<R: tauri::Runtime>(
     // 骗不过。所以归属核对只认标签 —— 拿路径里的 id 去信，等于让任何程序舱
     // 都能关掉别人的窗，而这种事发生时用户只会觉得「泊舟自己乱关窗」。
     if let Some((pod_id, verb)) = split_pod_path(&path, "/win/") {
-        let owns = podapp_runtime::manifest::get(pod_id)
-            .map(|info| owns_window(&info.slug, ctx.webview_label()))
-            .unwrap_or(false);
-        if !owns {
-            return json_result(Err(format!(
-                "window_denied: {} 动不了 {pod_id} 的窗口",
-                ctx.webview_label()
-            )));
+        if let Some(denied) = deny_unless_own(pod_id, ctx.webview_label()) {
+            return denied;
         }
         let Some(window) = ctx.app_handle().get_webview_window(ctx.webview_label()) else {
             return json_result(Err("window_missing: 找不到这扇窗".into()));
@@ -223,23 +240,24 @@ mod tests {
         }
     }
 
-    /// 一个程序舱只能动自己那扇窗。
+    /// 一个程序舱只能替**自己**调用 —— 既包括动窗口，也包括 `/rpc/` 上的能力。
     ///
-    /// 实机验过一轮（悬浮件去关二维码 Pod 的窗 → `window_denied`，关自己 → 关掉了），
-    /// 但那只证明当天对。这条守住的是拼法本身。
+    /// 实机验过窗口那半（悬浮件去关二维码 Pod 的窗 → 被拒，关自己 → 关掉了），
+    /// 而且日志确认过 pod 页面的 webview 标签就是 `pod-<slug>`。
+    /// 但实机只证明当天对，这条守住的是拼法本身。
     #[test]
-    fn a_pod_can_only_touch_its_own_window() {
-        assert!(owns_window("floattest", "pod-floattest"));
-        // 别人的窗：一律不行
-        assert!(!owns_window("qrfix", "pod-floattest"));
-        // 浮舱自己那扇窗更不行 —— 程序舱把浮舱关了，用户会以为整个程序崩了
-        assert!(!owns_window("floattest", "dock"));
-        // 前缀相同不算：pod-qr 不该动得了 pod-qrfix
-        assert!(!owns_window("qrfix", "pod-qr"));
-        assert!(!owns_window("qr", "pod-qrfix"));
+    fn a_pod_can_only_act_as_itself() {
+        assert!(is_own_surface("floattest", "pod-floattest"));
+        // 冒别人的名：一律不行。这一条挡住的是「读 B 的 storage」那条路
+        assert!(!is_own_surface("qrfix", "pod-floattest"));
+        // 浮舱那扇窗更不行 —— 程序舱把浮舱关了，用户会以为整个程序崩了
+        assert!(!is_own_surface("floattest", "dock"));
+        // 前缀相同不算：pod-qr 不该冒充得了 pod-qrfix
+        assert!(!is_own_surface("qrfix", "pod-qr"));
+        assert!(!is_own_surface("qr", "pod-qrfix"));
         // 空 slug 不该匹配上任何东西（清单读坏时 slug 可能是空的）
-        assert!(!owns_window("", "pod-"));
-        assert!(!owns_window("", ""));
+        assert!(!is_own_surface("", "pod-"));
+        assert!(!is_own_surface("", ""));
     }
 
     #[test]
