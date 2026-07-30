@@ -9,12 +9,16 @@
 //! | `/rpc/<pod-id>/<verb>` | 能力调用（POST） |
 //! | `/artifact/<id>` | 产物字节 |
 //! | `/pet/<pet-id>/sprite` | Codex 宠物图集字节 |
+//! | `/win/<pod-id>/<verb>` | 自己那扇窗的拖动与关闭（POST） |
 //!
 //! **CSP 由 [`podapp_runtime::perms::csp_for`] 逐个程序舱下发**，不在这里写死。
 //! 写死就意味着「这个程序舱申请了哪些网络源」这件事有两份定义。
 
 use podapp_runtime::{bridge, manifest, perms, serve};
 use tauri::http::{Request, Response};
+// `get_webview_window` 挂在 Manager trait 上，不 use 进来的报错是
+// 「AppHandle 没有这个方法」—— 看起来像 API 变了，其实只是 trait 没进作用域
+use tauri::Manager;
 
 /// 从 `/app/<pod-id>/<rel...>` 里拆出 pod-id 和相对路径。
 fn split_pod_path<'a>(path: &'a str, prefix: &str) -> Option<(&'a str, &'a str)> {
@@ -23,6 +27,16 @@ fn split_pod_path<'a>(path: &'a str, prefix: &str) -> Option<(&'a str, &'a str)>
         Some((id, rel)) => Some((id, rel)),
         None => Some((rest, "")),
     }
+}
+
+/// 这扇 webview 是不是那个程序舱自己的窗。
+///
+/// 抽成纯函数是因为它是 `/win/` 这条路上**唯一**会悄悄失效的地方：
+/// 一旦窗口标签的拼法在别处改了而这里没跟上，判断会一律变成 false（还好）
+/// 或者一律变成 true（灾难），而两种都不报错。实机跑一次只能证明"今天对"。
+fn owns_window(pod_slug: &str, webview_label: &str) -> bool {
+    // 标签由宿主建窗时定（`dock_open_pod` 里的 `pod-{slug}`），页面改不了它
+    !pod_slug.is_empty() && format!("pod-{pod_slug}") == webview_label
 }
 
 fn text(status: u16, body: &str) -> Response<Vec<u8>> {
@@ -74,6 +88,39 @@ pub fn handle<R: tauri::Runtime>(
         return json_result(crate::rpc_with_dock_capabilities(
             pod_id, verb, &args, &host,
         ));
+    }
+
+    // 窗口自带动作。**只准动自己那扇窗。**
+    //
+    // 路径里的 pod-id 是页面自己填的，骗得过；`webview_label` 是宿主建窗时定的，
+    // 骗不过。所以归属核对只认标签 —— 拿路径里的 id 去信，等于让任何程序舱
+    // 都能关掉别人的窗，而这种事发生时用户只会觉得「泊舟自己乱关窗」。
+    if let Some((pod_id, verb)) = split_pod_path(&path, "/win/") {
+        let owns = podapp_runtime::manifest::get(pod_id)
+            .map(|info| owns_window(&info.slug, ctx.webview_label()))
+            .unwrap_or(false);
+        if !owns {
+            return json_result(Err(format!(
+                "window_denied: {} 动不了 {pod_id} 的窗口",
+                ctx.webview_label()
+            )));
+        }
+        let Some(window) = ctx.app_handle().get_webview_window(ctx.webview_label()) else {
+            return json_result(Err("window_missing: 找不到这扇窗".into()));
+        };
+        return json_result(match verb {
+            // 交给系统拖：自己算坐标要处理 DPI 缩放，而混用逻辑/物理像素
+            // 是这个项目栽过的坑（AGENTS.md 5）
+            "drag" => window
+                .start_dragging()
+                .map(|_| serde_json::Value::Null)
+                .map_err(|e| format!("拖不动: {e}")),
+            "close" => window
+                .close()
+                .map(|_| serde_json::Value::Null)
+                .map_err(|e| format!("关不掉: {e}")),
+            other => Err(format!("window_unknown_verb: {other}")),
+        });
     }
 
     if let Some(id) = path.strip_prefix("/artifact/") {
@@ -174,6 +221,25 @@ mod tests {
             let (_, rest) = split_pod_path(path, "/pet/").expect("应当拆得出来");
             assert_ne!(rest, "sprite", "{path} 不该被当成图集请求");
         }
+    }
+
+    /// 一个程序舱只能动自己那扇窗。
+    ///
+    /// 实机验过一轮（悬浮件去关二维码 Pod 的窗 → `window_denied`，关自己 → 关掉了），
+    /// 但那只证明当天对。这条守住的是拼法本身。
+    #[test]
+    fn a_pod_can_only_touch_its_own_window() {
+        assert!(owns_window("floattest", "pod-floattest"));
+        // 别人的窗：一律不行
+        assert!(!owns_window("qrfix", "pod-floattest"));
+        // 浮舱自己那扇窗更不行 —— 程序舱把浮舱关了，用户会以为整个程序崩了
+        assert!(!owns_window("floattest", "dock"));
+        // 前缀相同不算：pod-qr 不该动得了 pod-qrfix
+        assert!(!owns_window("qrfix", "pod-qr"));
+        assert!(!owns_window("qr", "pod-qrfix"));
+        // 空 slug 不该匹配上任何东西（清单读坏时 slug 可能是空的）
+        assert!(!owns_window("", "pod-"));
+        assert!(!owns_window("", ""));
     }
 
     #[test]

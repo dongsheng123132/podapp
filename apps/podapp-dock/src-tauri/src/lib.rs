@@ -238,31 +238,69 @@ fn pod_webview_url(id: &str) -> Result<tauri::WebviewUrl, String> {
     ))
 }
 
-fn pod_window_options(id: &str) -> (f64, f64, bool) {
-    let fallback = (860.0, 620.0, true);
+/// 一个程序舱要开成什么样的窗。
+pub struct PodWindow {
+    pub width: f64,
+    pub height: f64,
+    pub resizable: bool,
+    /// `ui.container == "float"`：无边框、透明、置顶、不进任务栏。
+    ///
+    /// 这不是新发明的窗口形态 —— **浮舱自己就是这么开的**（`tauri.conf.json` 里
+    /// `decorations:false / transparent:true / alwaysOnTop:true / skipTaskbar:true`）。
+    /// float 只是把这套已经在 WebView2 上验证过的配方，交给清单去点。
+    pub float: bool,
+}
+
+fn pod_window_options(id: &str) -> PodWindow {
+    // 普通窗口和悬浮窗的默认尺寸不该一样：860×620 的无边框置顶窗会盖住半个屏幕，
+    // 而悬浮件的意义就是不挡事
+    let normal = PodWindow {
+        width: 860.0,
+        height: 620.0,
+        resizable: true,
+        float: false,
+    };
     let Ok((manifest, _)) =
         podapp_runtime::manifest::load_dir(&podapp_runtime::apps_root().join(id))
     else {
-        return fallback;
+        return normal;
+    };
+    let float = manifest.ui.container == "float";
+    let fallback = if float {
+        PodWindow {
+            width: 260.0,
+            height: 300.0,
+            // 悬浮件默认不可缩放：无边框窗的缩放边缘看不见，用户会在"怎么也抓不到边"
+            // 上耗掉耐心。要能缩放，清单里明写。
+            resizable: false,
+            float: true,
+        }
+    } else {
+        normal
     };
     let Some(window) = manifest.ui.window.as_ref() else {
         return fallback;
     };
-    let width = window
-        .get("width")
-        .and_then(Value::as_f64)
-        .unwrap_or(fallback.0)
-        .clamp(360.0, 1600.0);
-    let height = window
-        .get("height")
-        .and_then(Value::as_f64)
-        .unwrap_or(fallback.1)
-        .clamp(360.0, 1200.0);
-    let resizable = window
-        .get("resizable")
-        .and_then(Value::as_bool)
-        .unwrap_or(fallback.2);
-    (width, height, resizable)
+    // 悬浮件的下限放到 64：宠物那种就该很小。但**上限仍然收着** ——
+    // 一个 1600px 的置顶无边框窗等于劫持了用户的屏幕。
+    let (min_w, min_h) = if float { (64.0, 64.0) } else { (360.0, 360.0) };
+    PodWindow {
+        width: window
+            .get("width")
+            .and_then(Value::as_f64)
+            .unwrap_or(fallback.width)
+            .clamp(min_w, 1600.0),
+        height: window
+            .get("height")
+            .and_then(Value::as_f64)
+            .unwrap_or(fallback.height)
+            .clamp(min_h, 1200.0),
+        resizable: window
+            .get("resizable")
+            .and_then(Value::as_bool)
+            .unwrap_or(fallback.resizable),
+        float,
+    }
 }
 
 fn clamp_axis(value: i32, start: i32, extent: i32, size: i32) -> i32 {
@@ -314,14 +352,23 @@ async fn dock_open_pod(app: tauri::AppHandle, id: String) -> Result<(), String> 
         dock::set_expanded(&app, false);
         return Ok(());
     }
-    let (width, height, resizable) = pod_window_options(&id);
-    let window = tauri::WebviewWindowBuilder::new(&app, &label, pod_webview_url(&id)?)
+    let opts = pod_window_options(&id);
+    let mut builder = tauri::WebviewWindowBuilder::new(&app, &label, pod_webview_url(&id)?)
         .title(&info.name)
-        .inner_size(width, height)
-        .resizable(resizable)
-        .visible(false)
-        .build()
-        .map_err(|e| format!("打开失败: {e}"))?;
+        .inner_size(opts.width, opts.height)
+        .resizable(opts.resizable)
+        .visible(false);
+    if opts.float {
+        // 跟浮舱同一套配方。**`shadow(false)` 不能漏**：带阴影的透明窗在 Windows 上
+        // 会在圆角外画出一圈灰边，看起来像贴图本身有毛边 —— 而人会去查贴图。
+        builder = builder
+            .decorations(false)
+            .transparent(true)
+            .always_on_top(true)
+            .skip_taskbar(true)
+            .shadow(false);
+    }
+    let window = builder.build().map_err(|e| format!("打开失败: {e}"))?;
 
     // 先收成最终的小船尺寸，再取锚点。反过来会按展开面板定位，收起后留下整段面板宽度的空隙。
     dock::set_expanded(&app, false);

@@ -35,6 +35,11 @@
 6. 支持窄窗口，文字不能溢出，所有图标按钮有 `title` 或无障碍名称。
 7. 失败要返回能照着修的错误，成功返回 `{ "ok": true, "message": "..." }` 和结构化结果。
 8. 输出 UTF-8，界面至少提供简体中文；技术字段和 Action ID 保持英文。
+9. **不要调 AI。** `pod.ai.*` 三条永远返回 `capability_denied`，这是设计决定不是待办：
+   PodApp 不做 AI 能力接入，不带 SDK、不管密钥、不背计费。
+   用户机器上已经有 AI 了（Codex / Claude Code 就在旁边），它们通过 MCP 调你的动作。
+   **分工是：你负责确定性的那半（采集、转换、校验、落盘），AI 负责生成和理解。**
+   要「AI 帮我改这张图」的效果，正确形态是让 AI 来调你的动作，而不是你去调模型。
 
 ## 最小清单示例
 
@@ -65,6 +70,7 @@
     "home_dock": true
   },
   "permissions": {
+    "//ai": "这四项永远填 false。PodApp 不接 AI 能力（见下），填 true 也调不通",
     "ai": {
       "image_generate": false,
       "image_edit": false,
@@ -78,6 +84,36 @@
   }
 }
 ```
+
+## 两种容器：`window` 和 `float`
+
+`ui.container` 决定它开成什么样：
+
+| | `window`（默认） | `float` |
+|---|---|---|
+| 形态 | 普通窗口，有标题栏 | **无边框、透明、置顶、不进任务栏** |
+| 默认尺寸 | 860×620 | 260×300（下限 64×64） |
+| 适合 | 要摊开看的工具：编辑、批处理、报表 | 常驻在屏幕角落、随时瞥一眼的小件：状态灯、计时器、录制指示、宠物 |
+
+`float` 没有标题栏，所以两件事必须自己安排，否则用户会关不掉也拖不动：
+
+```html
+<!-- 想让哪块能拖窗，就给它 data-podapp-drag。
+     别标在整个 body 上 —— 那会把按钮和文字选择一起吃掉，
+     而「按钮点不动」比「窗口拖不动」更难查。 -->
+<div class="titlebar" data-podapp-drag>⠿ 我的小件</div>
+<button onclick="pod.win.close()">关掉</button>
+```
+
+```css
+/* 透明底靠页面自己让开。忘了这两行的话，无边框窗里是一整块白，
+   看起来像 transparent 没生效，其实是页面画了白底。 */
+html, body { margin: 0; height: 100%; background: transparent; }
+```
+
+`pod.win` 只有 `drag()` 和 `close()` 两条，而且**只能动自己那扇窗** ——
+宿主按窗口标签核对归属，传别人的 id 会被 `window_denied` 拒掉。
+窗口操作不进 `permissions`：申报「我要能移动我自己」是没有意义的一条。
 
 ## 完成标准
 

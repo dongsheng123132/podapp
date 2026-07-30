@@ -89,6 +89,27 @@ pub fn script() -> String {
       throw new Error((m && m.error) || "调用失败");
     }});
   }}
+  function win(verb) {{
+    return fetch("/win/" + POD + "/" + verb, {{ method: "POST" }})
+      .then(function (r) {{ return r.json(); }})
+      .then(function (m) {{
+        if (m && m.ok) return m.data;
+        throw new Error((m && m.error) || "窗口操作失败");
+      }});
+  }}
+  // 无边框的 float 窗口没有标题栏，得给一条能拖的路。**要显式标出来**：
+  // 整窗可拖会把按钮和文字选择一起吃掉，那种「点不动」查起来比拖不动更烦。
+  document.addEventListener("pointerdown", function (e) {{
+    var t = e.target;
+    while (t && t !== document) {{
+      if (t.hasAttribute && t.hasAttribute("data-podapp-drag")) {{
+        // 交给系统去拖：自己算坐标要处理 DPI 缩放，而那正是这个项目栽过的地方
+        win("drag");
+        return;
+      }}
+      t = t.parentNode;
+    }}
+  }});
   var imageProxy = new Proxy({{}}, {{ get: function (_t, k) {{
     return function () {{ return rpc("image." + String(k), Array.prototype.slice.call(arguments)); }};
   }}}});
@@ -112,10 +133,20 @@ pub fn script() -> String {
       set: function (k, v) {{ return rpc("storage.set", {{ key: k, value: v }}); }}
     }},
     artifact: {{ emit: function (p) {{ return rpc("artifact.emit", p); }} }},
+    // 窗口这两条**不是能力**，是容器的自带动作：一个程序舱只能动自己那扇窗，
+    // 所以不进权限清单（申报「我要能移动我自己」是没有意义的一条）。
+    // 宿主那侧按 webview 标签核对归属，这里传的 POD 骗不了它。
+    win: {{
+      drag: function () {{ return win("drag"); }},
+      close: function () {{ return win("close"); }}
+    }},
     ui: {{
       toast: function (m) {{ return post({{ __pod: "toast", msg: m }}); }},
       progress: function (p, l) {{ return post({{ __pod: "progress", percent: p, label: l }}); }},
-      close: function () {{ return post({{ __pod: "close" }}); }}
+      // **改成真的关窗。** 原来发的 postMessage 是嵌 iframe 时代的写法，
+      // 而程序舱早就是独立窗口了 —— 没有 parent，那条消息发出去就没了，
+      // 现象是「点了关闭没反应」，而作者会以为自己调错了 API。
+      close: function () {{ return win("close"); }}
     }},
     image: imageProxy,
     onEvent: function (fn) {{
@@ -299,12 +330,25 @@ mod tests {
         for verb in ["artifact", "/rpc/", "image.", "storage.get"] {
             assert!(js.contains(verb), "桥缺少 {verb}");
         }
-        // 桥上不该有通用 fetch 出口：唯一的 fetch 是打到自己的 /rpc/ 上
-        assert_eq!(
-            js.matches("fetch(").count(),
-            1,
-            "桥上只该有一处 fetch，且指向 /rpc/"
-        );
+        // 桥上不该有**通用** fetch 出口。
+        //
+        // 原来这条断言的是「只有一处 fetch」。加窗口动作时它红了 —— 但真正要守的
+        // 不是数量，是**每一处 fetch 都打在宿主自己认得的固定路径上**。
+        // 只把数字改大等于把守卫拆掉：下一个人加一处 `fetch(userUrl)` 照样过。
+        // 所以改成逐处核对目标前缀。
+        let targets: Vec<&str> = js
+            .split("fetch(")
+            .skip(1)
+            .map(|rest| rest.trim_start())
+            .collect();
+        assert!(!targets.is_empty(), "桥怎么会一处 fetch 都没有");
+        for t in &targets {
+            assert!(
+                t.starts_with("\"/rpc/\"") || t.starts_with("\"/win/\""),
+                "桥上出现了不认得的 fetch 目标（只准 /rpc/ 和 /win/）: {}",
+                &t[..t.len().min(40)]
+            );
+        }
     }
 
     #[test]
