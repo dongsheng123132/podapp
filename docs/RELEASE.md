@@ -71,6 +71,31 @@ gh release create v0.2.0 "<安装包>#中文标签" --title "..." --notes-file n
 上线它要做的事（照 U-King 的做法）：把 `latest.json` 和安装包一起同步到
 `u-claw.org.cn`（新加坡服务器 nginx 静态目录），发版脚本一次做完，别手动只传一半。
 
+## ⚠️ 顺序：先建 release，再推 main
+
+`podapp.net` 的 `latest.json` 是**构建时从 GitHub Release 镜像**的
+（`scripts/build-site.mjs` 去拉 `releases/latest/download/latest.json`）。
+
+所以推 main 会触发 Vercel 构建，而**那一刻如果 release 还没建，镜像到的就是旧版**。
+0.2.0 就是这么翻车的：push main 在 14:07:30，建 release 在 14:07:58 ——
+差 28 秒，于是 podapp.net 一直发着 0.1.1，而其余三路都已经是 0.2.0。
+
+**正确顺序**：打 tag → 建 release（GitHub 上 Latest 变成新版）→ **再推 main**。
+或者推完 main 之后再手动触发一次 Vercel 重新部署。
+
+## ⚠️ GitHub 资产名：ASCII 在文件名，中文在 `#` 后
+
+```bash
+# 对：文件本身是 ASCII 名
+gh release create v0.2.0 "PodApp-0.2.0-x64-setup.exe#泊舟 AI 小程序 0.2.0 安装包"
+
+# 错：中文在文件名上 —— gh 用的是**文件名**，`#` 后只是显示标签
+gh release create v0.2.0 "泊舟 AI 小程序_0.2.0_x64-setup.exe#PodApp-0.2.0-x64-setup.exe"
+```
+
+写反了 GitHub 会把中文字符剥掉，资产变成 `AI._0.2.0_x64-setup.exe`，
+而按 ASCII 名去下的直链**全部 404**。0.2.0 发的时候我就写反了，事后换的资产。
+
 ## 发布后必验（U-King 的教训）
 
 U-King 出过「点了一键升级但重启后仍不是新版」的半升级状态，原因是
