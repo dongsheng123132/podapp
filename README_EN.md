@@ -17,6 +17,7 @@ see the preview, confirm, take the result.
 
 [**⬇ Download for Windows**](https://github.com/dongsheng123132/podapp/releases/latest) ·
 [**🌐 podapp.net**](https://podapp.net/en) ·
+[**AI GUI Manifesto**](./MANIFESTO.md) ·
 English · [简体中文](./README.md)
 
 <img src="./docs/assets/dock.png" width="330" alt="The dock">
@@ -32,6 +33,25 @@ describe which heading you mean. That's the one thing PodApp does:
 A **Pod** = one manifest + one UI + a set of stable actions.
 Clicking the icon, calling it headless from an agent, and calling it over MCP
 **all run the same code path** — that's the foundation, not a nice-to-have.
+
+## The AI GUI Manifesto
+
+> **The future is not No GUI. It is Just Enough GUI.**
+
+AI is good at opening possibilities. Real-world action still needs explicit targets, scope,
+authority, and consequences. We call the interface between human intent and probabilistic
+intelligence — where both can select and confirm the same action — **AI GUI**.
+
+- Let AI understand and reason.
+- Let actions execute.
+- Let GUI clarify and confirm.
+- Let people retain final authority.
+
+PodApp is an open reference implementation of these ideas, not the manifesto itself. Read the
+[`AI GUI Manifesto`](./MANIFESTO.md) ·
+[`Principles`](./PRINCIPLES.md) ·
+[`Specification map`](./SPEC.md) ·
+[`Sign the manifesto`](./SIGNATORIES.md).
 
 ## 5 pods included
 
@@ -197,6 +217,7 @@ Spec: [`docs/POD-DEVELOPMENT.md`](./docs/POD-DEVELOPMENT.md).
 You don't need Rust: ship a skin, build a pod, add a language, reproduce a bug.
 
 [`CONTRIBUTING.md`](./CONTRIBUTING.md) ·
+[`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md) ·
 [Pod spec](./docs/POD-DEVELOPMENT.md) ·
 [Skin spec](./docs/SKIN-DEVELOPMENT.md) ·
 [Ecosystem](./docs/ECOSYSTEM.md) ·
@@ -205,5 +226,6 @@ You don't need Rust: ship a skin, build a pod, add a language, reproduce a bug.
 ## Licence
 
 Runtime under Apache-2.0 (see [LICENSE](./LICENSE)).
+The two AI GUI Manifesto texts are licensed under CC BY 4.0 for signing, translation, and sharing.
 The PodApp name and the boat logo are trademarks and are **not** covered by the code licence —
 see [TRADEMARK.md](./TRADEMARK.md).

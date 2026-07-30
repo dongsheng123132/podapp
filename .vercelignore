@@ -1,4 +1,5 @@
-# 官网只需要 scripts/build-site.mjs + pods/*/podapp.json，别的一概不用上传。
+# 官网只需要 scripts/build-site.mjs、pods/*/podapp.json 和两份宣言 Markdown，
+# 别的一概不用上传。
 #
 # 不写这份的后果很具体：Rust 的 target/ 有近两万个文件，CLI 直接被
 # 「files should NOT have more than 15000 items」顶回来。`.gitignore` 不管用 ——
@@ -16,6 +17,8 @@ docs/
 .github/
 
 *.md
+!MANIFESTO.md
+!MANIFESTO.zh-CN.md
 Cargo.toml
 Cargo.lock
 LICENSE

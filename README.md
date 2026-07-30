@@ -16,6 +16,7 @@
 
 [**⬇ 下载 Windows 版**](https://github.com/dongsheng123132/podapp/releases/latest) ·
 [**🌐 podapp.net**](https://podapp.net) ·
+[**AI GUI 宣言**](./MANIFESTO.zh-CN.md) ·
 [English](./README_EN.md) · 简体中文
 
 <img src="./docs/assets/dock.png" width="330" alt="浮舱">
@@ -29,6 +30,24 @@ PodApp 就干这一件事：**把 AI 生成的不确定结果，交给确定的�
 
 一个**程序舱（Pod）** = 一份清单 + 一个界面 + 一组稳定动作。
 人点图标、AI 无头调用、MCP 客户端调用，**走的是同一条代码路径** —— 这是立身之本，不是可选项。
+
+## AI GUI 宣言
+
+> **未来不是没有 GUI，而是只留下真正必要的 GUI。**
+
+AI 擅长打开可能性，真实行动却需要明确的对象、范围、权限和后果。我们把位于人的意图与概率
+智能之间、帮助双方共同选择和确认的界面称为 **AI GUI**。
+
+- 让 AI 负责理解与推理；
+- 让 Action 负责执行；
+- 让 GUI 负责确定与确认；
+- 让人保有最终决定权。
+
+PodApp 是这套思想的一种开放参考实现，不是宣言本身。阅读
+[`AI GUI 宣言`](./MANIFESTO.zh-CN.md) ·
+[`实践原则`](./PRINCIPLES.zh-CN.md) ·
+[`规范导航`](./SPEC.md) ·
+[`签署宣言`](./SIGNATORIES.md)。
 
 ## 内置 5 个程序舱
 
@@ -189,6 +208,7 @@ npx podapp pack my-pod       # 出一个 .pod，双击安装
 不写 Rust 也能贡献：提交一套皮肤、做一个 Pod、补一种语言、复现一个 Bug 都可以。
 
 [`CONTRIBUTING.md`](./CONTRIBUTING.md) ·
+[`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md) ·
 [Pod 规范](./docs/POD-DEVELOPMENT.md) ·
 [皮肤规范](./docs/SKIN-DEVELOPMENT.md) ·
 [生态路线](./docs/ECOSYSTEM.md) ·
@@ -197,4 +217,5 @@ npx podapp pack my-pod       # 出一个 .pod，双击安装
 ## 许可
 
 运行时 Apache-2.0（见 [LICENSE](./LICENSE)）。
+两份 AI GUI 宣言文本采用 CC BY 4.0，便于签署、翻译和传播。
 PodApp 名称与小船 Logo 属商标，代码许可不覆盖它们 —— 见 [TRADEMARK.md](./TRADEMARK.md)。

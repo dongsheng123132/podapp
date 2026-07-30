@@ -41,19 +41,109 @@ const C = {
 const esc = (s) =>
   String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
+/** 仓库 Markdown 是宣言的唯一真相源。官网只渲染，不再手抄一份。 */
+const DOC_LINKS = {
+  "./MANIFESTO.md": "/en/manifesto",
+  "./MANIFESTO.zh-CN.md": "/manifesto",
+  "./PRINCIPLES.md": `${REPO}/blob/main/PRINCIPLES.md`,
+  "./PRINCIPLES.zh-CN.md": `${REPO}/blob/main/PRINCIPLES.zh-CN.md`,
+  "./SIGNATORIES.md": `${REPO}/blob/main/SIGNATORIES.md`,
+};
+
+function inlineMarkdown(s) {
+  return esc(s)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, href) => {
+      const target = DOC_LINKS[href] ?? href;
+      return `<a href="${esc(target)}">${label}</a>`;
+    });
+}
+
+/**
+ * 只实现宣言实际使用的 Markdown 子集。输入是仓库内受信文件，输出仍先逐段转义；
+ * 支持标题、段落、引用、无序列表和分隔线。保持零依赖，也避免官网与 Markdown 漂移。
+ */
+function renderMarkdown(source) {
+  const lines = source.replace(/\r\n/g, "\n").split("\n");
+  const out = [];
+  let paragraph = [];
+  let listOpen = false;
+
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    out.push(`<p>${inlineMarkdown(paragraph.join(" "))}</p>`);
+    paragraph = [];
+  };
+  const closeList = () => {
+    if (!listOpen) return;
+    out.push("</ul>");
+    listOpen = false;
+  };
+
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) {
+      flushParagraph();
+      closeList();
+      continue;
+    }
+
+    const heading = /^(#{1,3})\s+(.+)$/.exec(line);
+    if (heading) {
+      flushParagraph();
+      closeList();
+      const level = heading[1].length;
+      out.push(`<h${level}>${inlineMarkdown(heading[2])}</h${level}>`);
+      continue;
+    }
+
+    if (/^---+$/.test(line)) {
+      flushParagraph();
+      closeList();
+      out.push("<hr>");
+      continue;
+    }
+
+    if (line.startsWith("> ")) {
+      flushParagraph();
+      closeList();
+      out.push(`<blockquote>${inlineMarkdown(line.slice(2))}</blockquote>`);
+      continue;
+    }
+
+    if (line.startsWith("- ")) {
+      flushParagraph();
+      if (!listOpen) {
+        out.push("<ul>");
+        listOpen = true;
+      }
+      out.push(`<li>${inlineMarkdown(line.slice(2))}</li>`);
+      continue;
+    }
+
+    closeList();
+    paragraph.push(line);
+  }
+
+  flushParagraph();
+  closeList();
+  return out.join("\n");
+}
+
 /** 界面文案。Pod 的内容来自清单，这里只有站本身的壳。 */
 const T = {
   zh: {
     htmlLang: "zh-CN",
     other: "English",
     otherHref: (p) => `/en${p === "/" ? "" : p}`,
-    nav: { home: "首页", download: "下载", source: "开源" },
+    nav: { home: "首页", manifesto: "宣言", download: "下载", source: "开源" },
     brandSub: "泊舟 AI 小程序",
     heroTitle: "把 AI 生成的不确定结果<br>交给确定的动作去加工",
     tagline: "AI 负责生成，PodApp 负责完成",
     lead: "AI 会画一张好看的海报，但那个二维码扫不出来。AI 会写一个网页，但你说不清「上面那个标题」是哪一个。PodApp 就干这一件事。",
     ctaDownload: "下载 Windows 版",
-    ctaSource: "看源码",
+    ctaManifesto: "阅读 AI GUI 宣言",
     note: "Windows 10 / 11 · 装到当前用户目录，不要管理员权限 · 安装包未签名，SmartScreen 会拦一下，点「更多信息 → 仍要运行」",
     flow: ["拖进去", "选一个动作", "看预览", "确认", "拿结果"],
     podsTitle: (n) => `内置 ${n} 个程序舱`,
@@ -94,13 +184,13 @@ const T = {
     htmlLang: "en",
     other: "简体中文",
     otherHref: (p) => (p === "/" ? "/" : p),
-    nav: { home: "Home", download: "Download", source: "Source" },
+    nav: { home: "Home", manifesto: "Manifesto", download: "Download", source: "Source" },
     brandSub: "PodApp",
     heroTitle: "Hand AI's uncertain output<br>to actions that are certain",
     tagline: "AI generates. PodApp finishes.",
     lead: "AI draws a beautiful poster, but the QR code scans into nothing. AI writes a page, but you can't describe which heading you mean. That's the one thing PodApp does.",
     ctaDownload: "Download for Windows",
-    ctaSource: "View source",
+    ctaManifesto: "Read the AI GUI Manifesto",
     note: "Windows 10 / 11 · Installs per-user, no admin rights · Unsigned installer — SmartScreen will warn; click “More info → Run anyway”",
     flow: ["Drop it in", "Pick an action", "See the preview", "Confirm", "Take the result"],
     podsTitle: (n) => `${n} pods included`,
@@ -194,7 +284,22 @@ footer{border-top:1px solid ${C.line};padding:32px 0 52px;color:${C.faint};font-
 .meta{display:flex;gap:9px;flex-wrap:wrap;margin:18px 0 0;font-size:12.5px;color:${C.dim}}
 .meta span{border:1px solid ${C.line};border-radius:99px;padding:3px 12px}
 .back{display:inline-block;margin-bottom:22px;font-size:13.5px;color:${C.dim}}
-@media(max-width:640px){.hero{padding:56px 0 44px}.hero h1{font-size:29px}}
+.manifesto{max-width:760px;padding-top:58px;padding-bottom:76px}
+.manifesto h1{font-size:38px;line-height:1.24;letter-spacing:-.02em;margin-bottom:12px}
+.manifesto h2{font-size:24px;line-height:1.35;margin:42px 0 14px}
+.manifesto h3{font-size:18px;line-height:1.45;margin:30px 0 10px}
+.manifesto p{color:${C.dim};margin:13px 0;max-width:720px}
+.manifesto strong{color:${C.ink}}
+.manifesto blockquote{margin:24px 0;padding:16px 20px;border-left:3px solid ${C.accent};background:${C.surface};color:${C.ink};font-size:17px}
+.manifesto ul{margin:16px 0 22px 24px}
+.manifesto hr{border:0;border-top:1px solid ${C.line};margin:42px 0}
+@media(max-width:640px){
+  header.top nav{gap:10px}
+  header.top nav .nav-optional{display:none}
+  .hero{padding:56px 0 44px}
+  .hero h1{font-size:29px}
+  .manifesto h1{font-size:31px}
+}
 `;
 
 const LOGO = `<svg class="logo" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="112" fill="#1b2024"/><path d="M274 96 C 352 170 394 240 400 322 L274 322 Z" fill="#eef3f4"/><path d="M238 150 C 198 214 176 268 168 322 L238 322 Z" fill="#56d39b"/><path d="M84 332 L428 332 C 420 402 352 430 256 430 C 160 430 92 402 84 332 Z" fill="#27b58b"/></svg>`;
@@ -206,6 +311,7 @@ const LOGO = `<svg class="logo" viewBox="0 0 512 512" aria-hidden="true"><rect w
 function page(lang, path, title, desc, body) {
   const t = T[lang];
   const home = lang === "en" ? "/en" : "/";
+  const manifesto = lang === "en" ? "/en/manifesto" : "/manifesto";
   const zhHref = path === "/" ? "/" : path;
   const enHref = path === "/" ? "/en" : `/en${path}`;
   return `<!doctype html>
@@ -227,14 +333,16 @@ function page(lang, path, title, desc, body) {
   <div class="brand">${lang === "en" ? "PodApp" : "泊舟 AI 小程序"}<small>${lang === "en" ? "泊舟" : "PodApp"}</small></div>
   <nav>
     <a href="${home}">${t.nav.home}</a>
-    <a href="${LATEST}">${t.nav.download}</a>
-    <a href="${REPO}">${t.nav.source}</a>
+    <a href="${manifesto}">${t.nav.manifesto}</a>
+    <a class="nav-optional" href="${LATEST}">${t.nav.download}</a>
+    <a class="nav-optional" href="${REPO}">${t.nav.source}</a>
     <a class="lang" href="${t.otherHref(path)}" hreflang="${lang === "en" ? "zh-CN" : "en"}">${t.other}</a>
   </nav>
 </div></header>
 ${body}
 <footer><div class="wrap">
   ${lang === "en" ? "PodApp" : "泊舟 PodApp"} · Apache-2.0 ·
+  <a href="${manifesto}">${t.nav.manifesto}</a> ·
   <a href="${REPO}">GitHub</a> · <a href="${PROTO}">${t.specLink}</a>
   <br>${t.footer}
 </div></footer>
@@ -283,6 +391,7 @@ const pods = readdirSync(join(root, "pods"), { withFileTypes: true })
 function indexPage(lang) {
   const t = T[lang];
   const prefix = lang === "en" ? "/en" : "";
+  const manifesto = `${prefix}/manifesto`;
   const cards = pods
     .map(
       (p) => `  <a class="card" href="${prefix}/pods/${esc(p.slug)}">
@@ -306,7 +415,7 @@ function indexPage(lang) {
   <p class="lead">${esc(t.lead)}</p>
   <div class="cta">
     <a class="btn primary" href="${LATEST}">${esc(t.ctaDownload)}</a>
-    <a class="btn ghost" href="${REPO}">${esc(t.ctaSource)}</a>
+    <a class="btn ghost" href="${manifesto}">${esc(t.ctaManifesto)}</a>
   </div>
   <p class="note">${esc(t.note)}</p>
   <div class="flow">${t.flow.map((s) => `<i>${esc(s)}</i>`).join("")}</div>
@@ -339,6 +448,23 @@ ${cards}
   <pre><code>npx podapp create my-pod
 npx podapp pack my-pod</code></pre>
 </div></section>`,
+  );
+}
+
+function manifestoPage(lang) {
+  const filename = lang === "en" ? "MANIFESTO.md" : "MANIFESTO.zh-CN.md";
+  const source = readFileSync(join(root, filename), "utf8");
+  const title = lang === "en" ? "The AI GUI Manifesto — PodApp" : "AI GUI 宣言 — PodApp";
+  const desc =
+    lang === "en"
+      ? "A deterministic interaction layer between human intent and probabilistic intelligence."
+      : "在人的意图与概率智能之间，建立确定性交互层。";
+  return page(
+    lang,
+    "/manifesto",
+    title,
+    desc,
+    `<article class="manifesto wrap">${renderMarkdown(source)}</article>`,
   );
 }
 
@@ -402,6 +528,8 @@ mkdirSync(join(out, "en", "pods"), { recursive: true });
 
 writeFileSync(join(out, "index.html"), indexPage("zh"));
 writeFileSync(join(out, "en", "index.html"), indexPage("en"));
+writeFileSync(join(out, "manifesto.html"), manifestoPage("zh"));
+writeFileSync(join(out, "en", "manifesto.html"), manifestoPage("en"));
 for (const p of pods) {
   writeFileSync(join(out, "pods", `${p.slug}.html`), podPage("zh", p));
   writeFileSync(join(out, "en", "pods", `${p.slug}.html`), podPage("en", p));
@@ -466,7 +594,13 @@ try {
 }
 
 // robots + sitemap：双语站不给 sitemap，搜索引擎多半只收其中一种语言
-const urls = ["/", "/en", ...pods.flatMap((p) => [`/pods/${p.slug}`, `/en/pods/${p.slug}`])];
+const urls = [
+  "/",
+  "/en",
+  "/manifesto",
+  "/en/manifesto",
+  ...pods.flatMap((p) => [`/pods/${p.slug}`, `/en/pods/${p.slug}`]),
+];
 writeFileSync(
   join(out, "sitemap.xml"),
   `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls
@@ -476,6 +610,6 @@ writeFileSync(
 writeFileSync(join(out, "robots.txt"), `User-agent: *\nAllow: /\nSitemap: ${SITE}/sitemap.xml\n`);
 
 console.log(`站点已生成到 website/`);
-console.log(`  中文：1 首页 + ${pods.length} 程序舱页`);
-console.log(`  英文：1 首页 + ${pods.length} 程序舱页（/en/）`);
+console.log(`  中文：1 首页 + 1 宣言页 + ${pods.length} 程序舱页`);
+console.log(`  英文：1 首页 + 1 宣言页 + ${pods.length} 程序舱页（/en/）`);
 console.log(`  sitemap ${urls.length} 条`);
