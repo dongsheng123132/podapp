@@ -423,16 +423,112 @@ fn dock_artifacts() -> Vec<podapp_runtime::artifacts::Artifact> {
     podapp_runtime::artifacts::list()
 }
 
-/// 本机认得的 Codex 宠物 —— 皮肤面板拿它列「能贴谁」。
+/// MCP 桥的位置。
+///
+/// Tauri 把 sidecar 放在主程序**旁边**，并且去掉 target triple 后缀。
+/// 开发态没有这一步（`cargo run` 不会复制 sidecar），所以回退到 workspace 的
+/// release 产物 —— 否则开发时这个面板永远显示「没装」，而那是环境问题不是缺陷。
+fn mcp_sidecar_path() -> Option<std::path::PathBuf> {
+    let exe = if cfg!(windows) {
+        "podapp-mcp.exe"
+    } else {
+        "podapp-mcp"
+    };
+    let beside = std::env::current_exe()
+        .ok()?
+        .parent()?
+        .join(exe);
+    if beside.is_file() {
+        return Some(beside);
+    }
+    #[cfg(debug_assertions)]
+    {
+        let dev = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../target/release")
+            .join(exe);
+        if dev.is_file() {
+            return dev.canonicalize().ok();
+        }
+    }
+    None
+}
+
+/// 「怎么把这些动作接给 AI」——路径 + 两条能直接抄走的配置。
+///
+/// **不自动改用户的配置文件。** `~/.claude.json` 和 `~/.codex/config.toml` 是用户
+/// 自己的东西，里面可能有一堆别的 MCP 服务器和设置。要动它，就得先留底、原子写、
+/// 能回滚（宪法第 10 条），那是另一件事；在那之前，给能抄走的东西比替用户做决定强。
+#[tauri::command]
+fn dock_mcp() -> Value {
+    let path = mcp_sidecar_path();
+    let shown = path
+        .as_ref()
+        .map(|p| p.display().to_string())
+        .unwrap_or_default();
+    // 无头可跑的动作数 —— 接上之后 AI 到底多了几件能做的事，这个数字比一句
+    // 「已接入」有用得多
+    let tools = podapp_mcp::tools().len();
+    serde_json::json!({
+        "present": path.is_some(),
+        "path": shown,
+        "tools": tools,
+        // Claude Code 有自己的 CLI，用它写配置最稳 —— 格式的事交给它自己管
+        "claude": format!("claude mcp add --scope user podapp \"{shown}\""),
+        // Codex 这边给 TOML 片段而不是命令：命令的参数写法我没把握，
+        // 而这份配置的形状是稳的。宁可让人多粘一次，不要给一条可能是错的命令。
+        "codexToml": format!("[mcp_servers.podapp]\ncommand = {:?}\nargs = []", shown),
+    })
+}
+
+/// 宠物的两个来源，**自己的在前**。
+///
+/// 一处是 Codex 的 `~/.codex/pets`（只读别人的地盘，不往里写），一处是用户拖进
+/// 浮舱的那些。自己的放前面，所以同名时用户拖进来的那只赢 —— 不然「我明明换了一只」
+/// 会因为 Codex 那边有同名的而看不到效果。
+///
+/// **只在这一处组装。** 两处各拼一遍列表和取图，迟早会一处认得另一处认不得，
+/// 而症状是「列表里有但贴不上」。
+pub fn pet_roots() -> Vec<std::path::PathBuf> {
+    vec![
+        podapp_runtime::home().join("pets"),
+        podapp_codex::pets::pets_root(),
+    ]
+}
+
+/// 本机认得的宠物 —— 皮肤面板拿它列「能贴谁」。
 ///
 /// 只回清单信息，**不回图集字节**：一张几 MB 的图 base64 走 IPC，
 /// 会让「有几只宠物」这个问题变成一次几十 MB 的传输。图走 `podapp://pet/<id>/sprite`。
 #[tauri::command]
 fn dock_pets() -> Vec<serde_json::Value> {
-    podapp_codex::pets::list()
+    podapp_codex::pets::list_in(&pet_roots())
         .iter()
         .map(|p| p.to_json())
         .collect()
+}
+
+/// 宠物图集字节。协议处理器走这一条，所以取图和列表用的是**同一组根** ——
+/// 分成两处迟早会一处认得另一处认不得，症状是「列表里有但贴不上」。
+pub fn pet_sprite_bytes(pet_id: &str) -> Result<(Vec<u8>, &'static str), String> {
+    let pet = podapp_codex::pets::find_in(&pet_roots(), pet_id)
+        .ok_or_else(|| format!("没有这只宠物: {pet_id}"))?;
+    let mime = if pet.sprite.extension().is_some_and(|e| e.eq_ignore_ascii_case("png")) {
+        "image/png"
+    } else {
+        "image/webp"
+    };
+    let bytes = std::fs::read(&pet.sprite).map_err(|e| format!("读不了图集: {e}"))?;
+    Ok((bytes, mime))
+}
+
+/// 装一只宠物：一张图集，或者一个带 `pet.json` 的目录。
+///
+/// 装进**浮舱自己的**宠物目录，绝不往 `~/.codex/pets` 里写 —— 那是 Codex 的地盘，
+/// 读它可以，替它决定放什么不行。
+#[tauri::command]
+fn dock_install_pet(path: String) -> Result<serde_json::Value, String> {
+    let into = podapp_runtime::home().join("pets");
+    podapp_codex::pets::install(std::path::Path::new(&path), &into).map(|p| p.to_json())
 }
 
 /// 命令行里带的 `.pod` 路径。
@@ -484,6 +580,8 @@ pub fn run() {
             dock_skin_prompt,
             dock_artifacts,
             dock_pets,
+            dock_install_pet,
+            dock_mcp,
         ])
         .setup(|app| {
             let handle = app.handle().clone();

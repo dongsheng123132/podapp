@@ -29,7 +29,7 @@
         <button id="update" class="update" type="button" hidden></button>
 
         <div id="drop" class="drop">
-          拖入图像、网页或 <code>.pod</code>
+          拖入图像、宠物图集或 <code>.pod</code>
         </div>
 
         <ul id="pods" class="pods"></ul>
@@ -38,6 +38,10 @@
           <button id="developer" class="developer-launch" type="button">
             <span aria-hidden="true">＋</span>
             <span><b>制作 Pod</b><small>把开发规范交给 AI</small></span>
+          </button>
+          <button id="mcp" class="developer-launch" type="button">
+            <span aria-hidden="true">⇄</span>
+            <span><b>接到 AI</b><small id="mcpSub">让 AI 直接调这些动作</small></span>
           </button>
           <span id="caps" class="caps"></span>
         </footer>
@@ -61,6 +65,20 @@
         <p id="copyStatus" class="hint">复制后修改第一行需求。</p>
       </section>
 
+      <section id="mcpPanel" class="subview" hidden>
+        <header class="subview-head">
+          <button id="mcpBack" class="back" type="button" title="返回" aria-label="返回">←</button>
+          <div><b>接到 AI</b><span>人点按钮和 AI 调用走同一条路</span></div>
+        </header>
+        <p id="mcpState" class="hint"></p>
+        <code id="mcpPath" class="mcp-path"></code>
+        <div class="skin-actions">
+          <button id="copyClaude" class="secondary" type="button">Claude Code 命令</button>
+          <button id="copyCodex" class="secondary" type="button">Codex 配置</button>
+        </div>
+        <p id="mcpStatus" class="hint">复制后在终端执行，或粘进 ~/.codex/config.toml</p>
+      </section>
+
       <section id="skinPanel" class="subview" hidden>
         <header class="subview-head">
           <button id="skinBack" class="back" type="button" title="返回" aria-label="返回">←</button>
@@ -69,7 +87,7 @@
         <div id="skinList" class="skin-list"></div>
 
         <div class="pet-section">
-          <div class="pet-head">宠物<small id="petHint">读 Codex 的 ~/.codex/pets</small></div>
+          <div class="pet-head">宠物<small id="petHint">拖一张 1536×1872 图集进来就有</small></div>
           <div id="petList" class="skin-list"></div>
         </div>
 

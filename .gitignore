@@ -10,3 +10,7 @@ apps/*/src-tauri/gen/
 website/
 
 .vercel
+
+# sidecar 是构建产物（scripts/build-sidecars.mjs 生成）。
+# 进仓库就会和源码悄悄错开：改了 MCP 忘了重编，包里还是旧的而日志全绿。
+apps/*/src-tauri/binaries/

@@ -2704,6 +2704,7 @@ name = "podapp-dock"
 version = "0.1.1"
 dependencies = [
  "podapp-codex",
+ "podapp-mcp",
  "podapp-qr",
  "podapp-runtime",
  "podapp-win",
@@ -2717,6 +2718,15 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-process",
  "tauri-plugin-updater",
+]
+
+[[package]]
+name = "podapp-mcp"
+version = "0.1.0"
+dependencies = [
+ "podapp-qr",
+ "podapp-runtime",
+ "serde_json",
 ]
 
 [[package]]

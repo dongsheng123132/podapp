@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:5180",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "node ../../scripts/build-sidecars.mjs && pnpm build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -38,12 +38,16 @@
         "https://github.com/dongsheng123132/podapp/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEVGRUE4RkIyMTNFNTJDM0YKUldRL0xPVVRzby9xN3hyaS9rb3ZMc3NnUE1DdzJndDdvcDB5ZTZ6d3ZKTEViMXA5NjYrY3IwNE4K",
-      "windows": { "installMode": "passive" }
+      "windows": {
+        "installMode": "passive"
+      }
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": [
+      "nsis"
+    ],
     "createUpdaterArtifacts": true,
     "resources": {
       "../../../pods": "pods"
@@ -56,18 +60,26 @@
     ],
     "windows": {
       "nsis": {
-        "languages": ["SimpChinese", "English"],
+        "languages": [
+          "SimpChinese",
+          "English"
+        ],
         "displayLanguageSelector": false,
         "installerIcon": "icons/icon.ico"
       }
     },
     "fileAssociations": [
       {
-        "ext": ["pod"],
+        "ext": [
+          "pod"
+        ],
         "name": "泊舟 AI 小程序包",
         "description": "可安装、可分享，也能由 AI 直接调用的小程序包",
         "role": "Editor"
       }
+    ],
+    "externalBin": [
+      "binaries/podapp-mcp"
     ]
   }
 }

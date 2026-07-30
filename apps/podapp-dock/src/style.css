@@ -419,3 +419,18 @@ button { font: inherit; letter-spacing: 0; }
 }
 
 .secondary:hover { border-color: var(--accent); }
+
+.mcp-path {
+  display: block;
+  margin: 6px 10px;
+  padding: 8px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--dim);
+  font-size: 10px;
+  line-height: 1.5;
+  /* 路径里有中文目录名、也可能很长。宁可折行也不要横向滚动条 ——
+     380px 宽的面板里，横滚等于把路径藏起来 */
+  word-break: break-all;
+}

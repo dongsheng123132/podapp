@@ -40,6 +40,9 @@ podapp-codex = { path = "../../../crates/podapp-codex" }
 # 打包：同样是宿主动作。压缩原语不该上桥 —— 桥上的能力对所有程序舱一律开放，
 # 而打包要读别的产物，得让清单逐条申报。
 podapp-zip = { path = "../../../crates/podapp-zip" }
+# MCP 桥：浮舱只用它数一下「接上之后 AI 多了几件能做的事」，
+# 真正的服务进程是随身带的 sidecar，不在这里跑。
+podapp-mcp = { path = "../../../crates/podapp-mcp" }
 tauri-plugin-updater = "2.10.1"
 tauri-plugin-process = "2.3.1"
 

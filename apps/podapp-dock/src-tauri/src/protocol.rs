@@ -93,7 +93,7 @@ pub fn handle<R: tauri::Runtime>(
         if rest != "sprite" {
             return text(404, "宠物只提供 /sprite");
         }
-        return match podapp_codex::pets::sprite_bytes(pet_id) {
+        return match crate::pet_sprite_bytes(pet_id) {
             Ok((bytes, mime)) => Response::builder()
                 .status(200)
                 .header("content-type", mime)

@@ -49,6 +49,15 @@ type DockPlacement = {
   height: number;
 };
 
+/** MCP 桥的现状。跟 Rust 侧 `dock_mcp` 一一对应。 */
+type McpInfo = {
+  present: boolean;
+  path: string;
+  tools: number;
+  claude: string;
+  codexToml: string;
+};
+
 /** 一只 Codex 宠物。跟 `podapp_codex::pets::PetInfo::to_json` 一一对应。 */
 type PetSummary = {
   id: string;
@@ -57,7 +66,7 @@ type PetSummary = {
   bytes: number;
 };
 
-type View = "home" | "developer" | "skins";
+type View = "home" | "developer" | "skins" | "mcp";
 
 const POSITION_KEY = "podapp.dock-position.v1";
 const ACTIVE_SKIN_KEY = "podapp.active-skin.v1";
@@ -93,6 +102,11 @@ const skinList = $<HTMLDivElement>("skinList");
 const skinFile = $<HTMLInputElement>("skinFile");
 const skinStatus = $<HTMLParagraphElement>("skinStatus");
 const petList = $<HTMLDivElement>("petList");
+const mcpPanel = $<HTMLElement>("mcpPanel");
+const mcpState = $<HTMLParagraphElement>("mcpState");
+const mcpPath = $<HTMLElement>("mcpPath");
+const mcpStatus = $<HTMLParagraphElement>("mcpStatus");
+const mcpSub = $<HTMLElement>("mcpSub");
 const petHint = $<HTMLElement>("petHint");
 const boatMark = $<HTMLSpanElement>("boatMark");
 const brandMark = $<HTMLSpanElement>("brandMark");
@@ -107,6 +121,7 @@ let cachedWindow = { x: 0, y: 0, scale: 1, ready: false };
 
 const pet = new Pet();
 let pets: PetSummary[] = [];
+let mcp: McpInfo | null = null;
 let activePetId = localStorage.getItem(ACTIVE_PET_KEY);
 
 type DragSession = {
@@ -255,8 +270,8 @@ function renderPets() {
 
   petList.replaceChildren(...rows);
   petHint.textContent = pets.length
-    ? `${pets.length} 只 · 来自 ~/.codex/pets`
-    : "没找到宠物 · 用 Codex 的 hatch-pet 做一只";
+    ? `${pets.length} 只 · 拖图集可再加`
+    : "拖一张 1536×1872 图集进来就有";
 }
 
 /**
@@ -301,6 +316,7 @@ function setView(view: View, expanded: boolean) {
   home.hidden = !expanded || view !== "home";
   developerPanel.hidden = !expanded || view !== "developer";
   skinPanel.hidden = !expanded || view !== "skins";
+  mcpPanel.hidden = !expanded || view !== "mcp";
 }
 
 function setEdgeClass(element: HTMLElement, placement: string, edge: string | null) {
@@ -369,7 +385,7 @@ function warn(error: unknown) {
   pet.once("failed");
   setTimeout(() => {
     drop.classList.remove("bad");
-    drop.textContent = "拖入图像、网页或 .pod";
+    drop.textContent = "拖入图像、宠物图集或 .pod";
   }, 4000);
 }
 
@@ -549,6 +565,51 @@ $("skins").onclick = () => {
   loadPets();
 };
 $("skinBack").onclick = () => setView("home", true);
+$("mcpBack").onclick = () => setView("home", true);
+
+/**
+ * 「接到 AI」。
+ *
+ * 桥**没随包发出去**的时候要说实话。含糊地写「未配置」会让人以为是自己没设对，
+ * 于是去翻文档、去改配置 —— 而真正的原因是那个文件根本不在机器上。
+ */
+async function renderMcp() {
+  try {
+    mcp = await invoke<McpInfo>("dock_mcp");
+  } catch (error) {
+    mcpState.textContent = String(error);
+    return;
+  }
+  mcpSub.textContent = mcp.present
+    ? `${mcp.tools} 个工具已就绪`
+    : "桥不在这台机器上";
+  mcpState.textContent = mcp.present
+    ? `接上之后，AI 多出 ${mcp.tools} 件能做的事 —— 跟你在这儿点按钮能做的完全一样。`
+    : "这个版本没带 MCP 桥。请装 0.2.0 以后的版本，或自己从源码构建。";
+  mcpPath.textContent = mcp.path || "（找不到 podapp-mcp）";
+  for (const id of ["copyClaude", "copyCodex"]) {
+    ($(id) as HTMLButtonElement).disabled = !mcp.present;
+  }
+}
+
+$("mcp").onclick = () => {
+  setView("mcp", true);
+  renderMcp();
+};
+
+async function copyMcp(which: "claude" | "codexToml", done: string) {
+  if (!mcp) return;
+  try {
+    await writeClipboard(mcp[which]);
+    mcpStatus.textContent = done;
+  } catch (error) {
+    mcpStatus.textContent = String(error);
+  }
+}
+$("copyClaude").onclick = () =>
+  copyMcp("claude", "已复制 —— 在终端里执行它，然后重开 Claude Code");
+$("copyCodex").onclick = () =>
+  copyMcp("codexToml", "已复制 —— 粘到 ~/.codex/config.toml 末尾，然后重开 Codex");
 
 copyPrompt.onclick = async () => {
   try {
@@ -590,7 +651,24 @@ $("copySkinPrompt").onclick = async () => {
 
 listen<string[]>("dock://dropped", async (event) => {
   for (const path of event.payload) {
-    if (!path.toLowerCase().endsWith(".pod")) continue;
+    const lower = path.toLowerCase();
+    // 拖一张图集进来就装成宠物。现成宠物（Nyxie 那类）解压出来就是一张 webp，
+    // 非要人先写一份 pet.json 才肯收，等于把门槛抬到没人愿意试。
+    if (lower.endsWith(".png") || lower.endsWith(".webp")) {
+      try {
+        const it = await invoke<PetSummary>("dock_install_pet", { path });
+        drop.textContent = `已装上宠物 ${it.displayName}`;
+        await loadPets();
+        selectPet(it.id);
+        pet.once("jumping");
+      } catch (error) {
+        // 尺寸不对那类错误是**有用的信息**（要 1536×1872，这张是多少），
+        // 原样让用户看到，别包成一句「安装失败」
+        warn(error);
+      }
+      continue;
+    }
+    if (!lower.endsWith(".pod")) continue;
     try {
       const pod = await invoke<PodInfo>("dock_install", { path });
       drop.textContent = `已安装 ${pod.name} v${pod.version}`;

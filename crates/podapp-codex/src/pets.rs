@@ -155,27 +155,188 @@ fn safe_join(dir: &Path, rel: &str) -> Option<PathBuf> {
     real.starts_with(&root).then_some(real)
 }
 
-/// 本机认得的宠物，按名字排序（顺序飘的话皮肤列表每次打开都在跳）。
-pub fn list() -> Vec<PetInfo> {
-    let Ok(entries) = std::fs::read_dir(pets_root()) else {
-        // 没装 Codex、或者一只宠物都没做过 —— 这是常态不是错误
-        return vec![];
+/// 契约要求的图集尺寸：8 列 × 9 行，每格 192×208。
+pub const ATLAS_W: u32 = 192 * 8;
+pub const ATLAS_H: u32 = 208 * 9;
+
+/// 从**文件头**读图集尺寸。
+///
+/// 刻意不解码整张图：这里只需要宽高，而引一个图像解码器进来意味着
+/// 多一个要跟着升级的攻击面 —— 对一个「读两个整数」的需求不值得。
+///
+/// PNG 认 IHDR；WebP 三种子格式（VP8X 扩展 / VP8L 无损 / VP8 有损）都认，
+/// 因为 hatch-pet 出的是 PNG，而 Nyxie 那类现成宠物出的是 VP8L。
+/// 只认一种的后果是「明明是张好图却说格式不对」。
+pub fn atlas_size(b: &[u8]) -> Option<(u32, u32)> {
+    let be32 = |i: usize| -> Option<u32> {
+        Some(u32::from_be_bytes(b.get(i..i + 4)?.try_into().ok()?))
     };
-    let mut pets: Vec<PetInfo> = entries
-        .flatten()
-        .filter(|e| e.path().is_dir())
-        .filter_map(|e| read_one(&e.path()))
+    // PNG: 8 字节签名 + 长度 + "IHDR" + 宽 + 高
+    if b.starts_with(b"\x89PNG\r\n\x1a\n") && b.get(12..16) == Some(b"IHDR") {
+        return Some((be32(16)?, be32(20)?));
+    }
+    if !(b.starts_with(b"RIFF") && b.get(8..12) == Some(b"WEBP")) {
+        return None;
+    }
+    let le24 = |i: usize| -> Option<u32> {
+        let s = b.get(i..i + 3)?;
+        Some(u32::from(s[0]) | u32::from(s[1]) << 8 | u32::from(s[2]) << 16)
+    };
+    let mut i = 12;
+    while i + 8 <= b.len() {
+        let tag = b.get(i..i + 4)?;
+        let size = u32::from_le_bytes(b.get(i + 4..i + 8)?.try_into().ok()?) as usize;
+        let data = i + 8;
+        match tag {
+            // 画布尺寸存的是「实际值 - 1」，少加这个 1 会让 1536 变成 1535，
+            // 而错一像素的报错看起来像是图真的不对
+            b"VP8X" => return Some((le24(data + 4)? + 1, le24(data + 7)? + 1)),
+            b"VP8L" => {
+                let bits = u32::from_le_bytes(b.get(data + 1..data + 5)?.try_into().ok()?);
+                return Some(((bits & 0x3FFF) + 1, ((bits >> 14) & 0x3FFF) + 1));
+            }
+            b"VP8 " => {
+                let w = u16::from_le_bytes(b.get(data + 6..data + 8)?.try_into().ok()?);
+                let h = u16::from_le_bytes(b.get(data + 8..data + 10)?.try_into().ok()?);
+                return Some((u32::from(w & 0x3FFF), u32::from(h & 0x3FFF)));
+            }
+            _ => {}
+        }
+        // RIFF 块长度是奇数时要补一个填充字节，不补的话后面每一块都错位
+        i = data + size + (size & 1);
+    }
+    None
+}
+
+/// 这张图能不能当宠物图集。
+///
+/// **在门口拦住，不要装完再说。** 拖进来一张随手截的图，如果直接装上，
+/// 症状是「宠物是一小块糊的东西在抖」—— 人第一反应会怀疑浮舱坏了，
+/// 而不是怀疑自己拖错了文件。
+pub fn check_atlas(bytes: &[u8]) -> Result<(), String> {
+    if bytes.len() as u64 > MAX_SPRITE_BYTES {
+        return Err(format!(
+            "图集太大（{} MB），上限 {} MB",
+            bytes.len() / 1024 / 1024,
+            MAX_SPRITE_BYTES / 1024 / 1024
+        ));
+    }
+    // 刻意**不**写 `Some((ATLAS_W, ATLAS_H)) =>`。常量能进模式，但一旦有人把常量
+    // 改成小写名，同一行就从「比较」悄悄变成「绑定」，于是任何尺寸都通过 ——
+    // 而这道闸门失效是不会报错的。用 if 比较，没有这个歧义。
+    let Some((w, h)) = atlas_size(bytes) else {
+        return Err("认不出这是 PNG 还是 WebP —— 宠物图集只收这两种".into());
+    };
+    if (w, h) != (ATLAS_W, ATLAS_H) {
+        return Err(format!(
+            "图集要 {ATLAS_W}×{ATLAS_H}（8 列 × 9 行，每格 192×208），这张是 {w}×{h}"
+        ));
+    }
+    Ok(())
+}
+
+/// 装一只宠物。`src` 可以是**一张图集**，也可以是**一个带 `pet.json` 的目录**。
+///
+/// 收图集是为了「拖进来就有」：现成宠物（Nyxie 那类）解压出来就是一张 webp，
+/// 让人先写一份 `pet.json` 才肯收，等于把门槛抬到没人愿意试。
+pub fn install(src: &Path, into: &Path) -> Result<PetInfo, String> {
+    let (atlas, name) = if src.is_dir() {
+        let pet = read_one(src).ok_or("这个目录里没有能用的 pet.json + 图集")?;
+        (pet.sprite, pet.id)
+    } else {
+        let stem = src
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("pet")
+            .to_string();
+        (src.to_path_buf(), stem)
+    };
+
+    let bytes = std::fs::read(&atlas).map_err(|e| format!("读不了图集: {e}"))?;
+    check_atlas(&bytes)?;
+    let ext = mime_of(&atlas)
+        .map(|m| if m == "image/png" { "png" } else { "webp" })
+        .ok_or("图集只收 png / webp")?;
+
+    // 文件夹名要能安全地拼回路径。图集叫「我的 宠物!!.webp」是常事，
+    // 直接拿去当目录名，之后 find() 会因为 is_safe_id 不认而查不到 ——
+    // 而那时现象是「装成功了但列表里没有」，最难查的一类。
+    let id: String = name
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '-' | '_') {
+                c.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>()
+        .trim_matches('-')
+        .chars()
+        .take(48)
         .collect();
+    let id = if is_safe_id(&id) { id } else { "pet".to_string() };
+
+    let dir = into.join(&id);
+    std::fs::create_dir_all(&dir).map_err(|e| format!("建不了宠物目录: {e}"))?;
+    std::fs::write(dir.join(format!("spritesheet.{ext}")), &bytes)
+        .map_err(|e| format!("写不了图集: {e}"))?;
+    // 清单照 Codex 的形状写，不加自己的字段 —— 这样这只宠物直接拷进
+    // ~/.codex/pets 也能用，两边不会分家
+    let manifest = json!({
+        "id": id,
+        "displayName": name,
+        "description": "",
+        "spritesheetPath": format!("spritesheet.{ext}"),
+    });
+    std::fs::write(
+        dir.join("pet.json"),
+        serde_json::to_string_pretty(&manifest).unwrap_or_default(),
+    )
+    .map_err(|e| format!("写不了 pet.json: {e}"))?;
+
+    read_one(&dir).ok_or_else(|| "装完了却读不回来".to_string())
+}
+
+/// 若干个根目录里认得的宠物，按 id 排序（顺序飘的话列表每次打开都在跳）。
+///
+/// 多个根是因为宠物有两个来源：Codex 自己的 `~/.codex/pets`，和用户拖进浮舱的那些。
+/// **同 id 时先出现的根赢** —— 调用方把自己的根放前面，就能覆盖同名的 Codex 宠物。
+pub fn list_in(roots: &[PathBuf]) -> Vec<PetInfo> {
+    let mut pets: Vec<PetInfo> = Vec::new();
+    for root in roots {
+        let Ok(entries) = std::fs::read_dir(root) else {
+            // 目录不存在是常态：没装 Codex、或者还没拖过宠物
+            continue;
+        };
+        for e in entries.flatten().filter(|e| e.path().is_dir()) {
+            if let Some(pet) = read_one(&e.path()) {
+                if !pets.iter().any(|p| p.id == pet.id) {
+                    pets.push(pet);
+                }
+            }
+        }
+    }
     pets.sort_by(|a, b| a.id.cmp(&b.id));
     pets
 }
 
-/// 找一只宠物。
-pub fn find(id: &str) -> Option<PetInfo> {
+/// 本机认得的宠物（只看 Codex 那个根）。
+pub fn list() -> Vec<PetInfo> {
+    list_in(&[pets_root()])
+}
+
+/// 在若干个根里找一只宠物。
+pub fn find_in(roots: &[PathBuf], id: &str) -> Option<PetInfo> {
     if !is_safe_id(id) {
         return None;
     }
-    read_one(&pets_root().join(id))
+    roots.iter().find_map(|r| read_one(&r.join(id)))
+}
+
+/// 找一只宠物（只看 Codex 那个根）。
+pub fn find(id: &str) -> Option<PetInfo> {
+    find_in(&[pets_root()], id)
 }
 
 /// 图集字节 + MIME。给 `podapp://` 那条路直接端给 WebView。
@@ -317,6 +478,100 @@ mod tests {
 
             make_pet(root, "absolute", r#"{"spritesheetPath":"C:\\x.png"}"#, "");
             assert!(find("absolute").is_none(), "清单里的绝对路径被接受了");
+        });
+    }
+
+    /// 造一个只有文件头的 PNG。`atlas_size` 只读头，所以验尺寸不需要真图 ——
+    /// 真造一张 1536×1872 会让这几条测试从毫秒变成秒。
+    fn png_header(w: u32, h: u32) -> Vec<u8> {
+        let mut v = b"\x89PNG\r\n\x1a\n".to_vec();
+        v.extend_from_slice(&13u32.to_be_bytes());
+        v.extend_from_slice(b"IHDR");
+        v.extend_from_slice(&w.to_be_bytes());
+        v.extend_from_slice(&h.to_be_bytes());
+        v.extend_from_slice(&[8, 6, 0, 0, 0]);
+        v
+    }
+
+    /// VP8L（无损 WebP）的头。Nyxie 那类现成宠物出的就是这个子格式 ——
+    /// 只认 PNG 的话，它们会被判成「格式不对」，而图其实完全没问题。
+    fn webp_vp8l(w: u32, h: u32) -> Vec<u8> {
+        let mut v = b"RIFF\0\0\0\0WEBP".to_vec();
+        v.extend_from_slice(b"VP8L");
+        v.extend_from_slice(&16u32.to_le_bytes());
+        v.push(0x2f);
+        let bits = (w - 1) | ((h - 1) << 14);
+        v.extend_from_slice(&bits.to_le_bytes());
+        v.extend_from_slice(&[0; 11]);
+        v
+    }
+
+    #[test]
+    fn reads_atlas_size_from_the_header_of_both_formats() {
+        assert_eq!(atlas_size(&png_header(1536, 1872)), Some((1536, 1872)));
+        // VP8L 存的是「实际值 - 1」，少加那个 1 会让 1536 变 1535，
+        // 而错一像素的报错看起来像图真的不对
+        assert_eq!(atlas_size(&webp_vp8l(1536, 1872)), Some((1536, 1872)));
+        assert_eq!(atlas_size(b"not an image at all"), None);
+        assert_eq!(atlas_size(&[]), None);
+    }
+
+    /// 拖错文件要**在门口**说清楚错在哪。只说「格式不对」，人会去转格式，
+    /// 而真正的问题是尺寸。
+    #[test]
+    fn a_wrong_sized_image_is_refused_with_both_numbers() {
+        assert!(check_atlas(&png_header(1536, 1872)).is_ok());
+        let e = check_atlas(&png_header(800, 600)).unwrap_err();
+        assert!(e.contains("1536×1872"), "没说要多大: {e}");
+        assert!(e.contains("800×600"), "没说这张是多大: {e}");
+        assert!(check_atlas(b"random bytes").unwrap_err().contains("WebP"));
+    }
+
+    /// 拖一张图集进来就该有一只宠物，不用先手写 pet.json。
+    #[test]
+    fn dropping_just_an_atlas_installs_a_pet() {
+        sandbox("install", |root| {
+            let src = root.parent().unwrap().join("我的 宠物!! v2.png");
+            std::fs::write(&src, png_header(1536, 1872)).unwrap();
+
+            let pet = install(&src, root).expect("该装上");
+            // 文件夹名必须是能安全拼回路径的形状，否则装完 find() 查不到，
+            // 现象是「装成功了但列表里没有」
+            assert!(is_safe_id(&pet.id), "id 不安全: {}", pet.id);
+            assert_eq!(pet.display_name, "我的 宠物!! v2");
+            assert!(find_in(&[root.to_path_buf()], &pet.id).is_some());
+            // 清单照 Codex 的形状写，这只宠物拷进 ~/.codex/pets 也该能用
+            let m: Value =
+                serde_json::from_str(&std::fs::read_to_string(root.join(&pet.id).join("pet.json")).unwrap())
+                    .unwrap();
+            assert_eq!(m["spritesheetPath"], "spritesheet.png");
+        });
+    }
+
+    #[test]
+    fn a_random_screenshot_is_refused_at_the_door() {
+        sandbox("badinstall", |root| {
+            let src = root.parent().unwrap().join("screenshot.png");
+            std::fs::write(&src, png_header(1920, 1080)).unwrap();
+            assert!(install(&src, root).is_err());
+            // 拒了就不该留下半只宠物
+            assert!(list_in(&[root.to_path_buf()]).is_empty(), "留下了残骸");
+        });
+    }
+
+    /// 宠物有两个来源（Codex 的和用户拖进来的）。同 id 时靠前的根赢，
+    /// 否则「我明明换了一只」会因为 Codex 那边有同名的而看不到效果。
+    #[test]
+    fn the_first_root_wins_on_a_name_clash() {
+        sandbox("roots", |codex| {
+            let mine = codex.parent().unwrap().join("mypets");
+            std::fs::create_dir_all(&mine).unwrap();
+            make_pet(codex, "shared", r#"{"displayName":"Codex 的","spritesheetPath":"s.png"}"#, "s.png");
+            make_pet(&mine, "shared", r#"{"displayName":"我的","spritesheetPath":"s.png"}"#, "s.png");
+
+            let pets = list_in(&[mine.clone(), codex.to_path_buf()]);
+            assert_eq!(pets.len(), 1, "同 id 该只出现一次");
+            assert_eq!(pets[0].display_name, "我的");
         });
     }
 
