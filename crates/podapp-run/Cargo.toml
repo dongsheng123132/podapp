@@ -1,0 +1,18 @@
+[package]
+name = "podapp-run"
+version = "0.1.0"
+description = "泊舟的命令行面 —— 能被任何调度器调用（我们不自带定时器）"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "podapp-run"
+path = "src/main.rs"
+
+[dependencies]
+podapp-runtime = { path = "../podapp-runtime" }
+# 能力与宿主动作走共用组装：CLI 这个面必须和浮舱、MCP 看到同一批动词
+podapp-host = { path = "../podapp-host" }
+podapp-flow = { path = "../podapp-flow" }
+serde_json.workspace = true

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/podapp-runtime", "crates/podapp-win", "crates/podapp-qr", "crates/podapp-mcp", "crates/podapp-codex", "crates/podapp-zip", "crates/podapp-cli", "crates/podapp-flow"]
+members = ["crates/podapp-runtime", "crates/podapp-win", "crates/podapp-qr", "crates/podapp-mcp", "crates/podapp-codex", "crates/podapp-zip", "crates/podapp-cli", "crates/podapp-flow", "crates/podapp-host", "crates/podapp-run"]
 
 [workspace.package]
 edition = "2021"

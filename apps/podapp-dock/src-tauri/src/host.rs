@@ -50,18 +50,9 @@ impl HostBridge for DockHost {
     /// `permissions.host_actions` 里申报了这个 ID，这里不必再查一遍
     /// —— 查两遍的坏处是两处规则会慢慢不一致。
     fn host_action(&self, id: &str, input: Value) -> Result<Value, String> {
-        if id.starts_with("host.codex.") {
-            return podapp_codex::host_action(id, input);
-        }
-        if id.starts_with("host.zip.") {
-            return podapp_zip::host_action(id, input);
-        }
-        // 本机已装的命令行工具。**注意这不是"接 AI"** —— 红线挡的是接入
-        // （带 SDK、管密钥、背计费）；调用用户自己装好、自己配好的工具，
-        // 密钥是他的、账号是他的，我们一个依赖都不引。
-        if id.starts_with("host.cli.") {
-            return podapp_cli::host_action(id, input);
-        }
-        Err(format!("capability_unavailable: 浮舱没有宿主动作 {id}"))
+        // **在这里不列举**，交给 `podapp-host`：三个面（浮舱 / MCP / CLI）
+        // 必须看到同一批动词，而各自列一遍就是漂移的起点 ——
+        // MCP 那边漏了一整组宿主动作整整一版，两边都不报错。
+        podapp_host::host_action(id, input)
     }
 }

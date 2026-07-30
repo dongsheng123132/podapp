@@ -9,7 +9,7 @@
 //! 之后装的每一个 `.pod` 都自动成为一个可调工具，不用改配置 ——
 //! 工具表是每次 `tools/list` 现算的，不是启动时快照的。
 
-use podapp_runtime::{Capabilities, HostProfile};
+use podapp_runtime::HostProfile;
 
 fn main() {
     use std::io::{BufRead, Write};
@@ -18,8 +18,9 @@ fn main() {
     let _ = podapp_runtime::init(HostProfile::podapp(env!("CARGO_PKG_VERSION")));
 
     // 能力集要和浮舱一致，否则「界面里能用的程序舱，AI 调就报 unknown_capability」。
-    // qr 能力在这里装上。
-    let caps = Capabilities::builtin().with(podapp_qr_capability());
+    // **所以在这里不自己拼**：组装只有 podapp-host 一处，三个面同时拿到。
+    // 这条注释以前就在，但当时只管住了能力，漏了宿主动作 —— 于是漂了。
+    let caps = podapp_host::capabilities();
 
     let stdin = std::io::stdin();
     let mut stdout = std::io::stdout();
@@ -45,9 +46,4 @@ fn main() {
             let _ = stdout.flush();
         }
     }
-}
-
-/// qr 能力单独一个 crate，这里按需接上。
-fn podapp_qr_capability() -> podapp_qr::QrCapability {
-    podapp_qr::QrCapability
 }

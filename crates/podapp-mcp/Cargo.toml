@@ -16,6 +16,8 @@ path = "src/main.rs"
 
 [dependencies]
 podapp-runtime = { path = "../podapp-runtime" }
-# 二维码能力：MCP 这条路要和浮舱看到同一批动词
-podapp-qr = { path = "../podapp-qr" }
+# 能力与宿主动作的唯一组装处 —— MCP 这条路要和浮舱看到同一批动词。
+# 直接依赖某个能力 crate（原来是 podapp-qr）就是漂移的起点：
+# 加能力的人只会去改浮舱，不会想到 MCP 这边还有一份。
+podapp-host = { path = "../podapp-host" }
 serde_json.workspace = true

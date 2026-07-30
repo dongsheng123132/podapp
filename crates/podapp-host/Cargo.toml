@@ -1,0 +1,15 @@
+[package]
+name = "podapp-host"
+version = "0.1.0"
+description = "宿主能力与宿主动作的唯一组装处 —— 三个面（GUI / MCP / CLI）看到同一批动词"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+podapp-runtime = { path = "../podapp-runtime" }
+podapp-qr = { path = "../podapp-qr" }
+podapp-codex = { path = "../podapp-codex" }
+podapp-zip = { path = "../podapp-zip" }
+podapp-cli = { path = "../podapp-cli" }
+serde_json.workspace = true

@@ -34,7 +34,8 @@ pub struct DockStatus {
 /// 浮舱装了哪些能力。**只在这一处组装** —— 各处各建一份的话，
 /// 「界面里能调的动词」和「无头能调的动词」会悄悄不一样，而那正是 parity 要防的。
 fn capabilities() -> Capabilities {
-    Capabilities::builtin().with(podapp_qr::QrCapability)
+    // 组装在 `podapp-host` 一处 —— 浮舱、MCP、CLI 从同一个地方取
+    podapp_host::capabilities()
 }
 
 /// 比较内置小程序版本。官方清单只使用数字点分版本；遇到无法识别的版本时，

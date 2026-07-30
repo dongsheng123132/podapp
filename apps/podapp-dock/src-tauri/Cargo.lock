@@ -2710,14 +2710,12 @@ dependencies = [
 name = "podapp-dock"
 version = "0.1.1"
 dependencies = [
- "podapp-cli",
  "podapp-codex",
  "podapp-flow",
+ "podapp-host",
  "podapp-mcp",
- "podapp-qr",
  "podapp-runtime",
  "podapp-win",
- "podapp-zip",
  "serde",
  "serde_json",
  "tauri",
@@ -2738,10 +2736,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "podapp-host"
+version = "0.1.0"
+dependencies = [
+ "podapp-cli",
+ "podapp-codex",
+ "podapp-qr",
+ "podapp-runtime",
+ "podapp-zip",
+ "serde_json",
+]
+
+[[package]]
 name = "podapp-mcp"
 version = "0.1.0"
 dependencies = [
- "podapp-qr",
+ "podapp-host",
  "podapp-runtime",
  "serde_json",
 ]

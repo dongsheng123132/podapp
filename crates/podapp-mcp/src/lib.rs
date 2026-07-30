@@ -36,7 +36,7 @@
 //!
 //! [`server/discover`]: https://modelcontextprotocol.io/specification/2026-07-28/server/discover
 
-use podapp_runtime::{Capabilities, HeadlessHost, Invocation};
+use podapp_runtime::{Capabilities, Invocation};
 use serde_json::{json, Value};
 
 /// 认得的协议版本，**新的在前**（`server/discover` 按这个顺序端出去，
@@ -258,7 +258,11 @@ pub fn call_tool(params: &Value, caps: &Capabilities) -> Result<Value, (i64, Str
 
     // 失败走 MCP 的 isError 而不是 JSON-RPC 的 error：**工具执行失败不是协议错误**。
     // 混成协议错误，客户端多半会断连或整个会话报错，而用户看到的只是「MCP 挂了」。
-    match podapp_runtime::headless::invoke(&inv, &HeadlessHost::new(), caps, None) {
+    // **必须是带宿主动作的那个宿主。** 原来这里是 `HeadlessHost::new()` ——
+    // 于是 chatlog（host.codex.*）和 nine-grid（host.zip.pack）在浮舱里能用，
+    // AI 走 MCP 调就报 capability_unavailable。人能做的和 AI 能做的悄悄分了家，
+    // 而两边都不报错。组装收到 podapp-host 一处之后，这条不会再漂。
+    match podapp_runtime::headless::invoke(&inv, &podapp_host::headless_host(), caps, None) {
         Ok(v) => Ok(json!({
             "content": [{ "type": "text", "text": render(&v) }],
             "isError": false,
@@ -371,7 +375,8 @@ mod tests {
     use super::*;
 
     fn caps() -> Capabilities {
-        Capabilities::builtin()
+        // 用发布出去的那一套，不是自己拼一个 —— 拼一个就等于绕开了刚修的漂移
+        podapp_host::capabilities()
     }
 
     #[test]

@@ -32,20 +32,16 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 podapp-runtime = { path = "../../../crates/podapp-runtime" }
+# 能力与宿主动作的唯一组装处。加能力只改那一个 crate，三个面同时拿到。
+# qr / zip / cli 都经它进来，所以浮舱不再直接依赖它们 ——
+# 留着直接依赖会让「改哪个 crate 会影响浮舱」看起来比实际更宽。
+podapp-host = { path = "../../../crates/podapp-host" }
 podapp-win = { path = "../../../crates/podapp-win" }
-# 二维码能力：装在宿主这一侧，不进核心运行时。换个宿主不想要，去掉这一行即可。
-podapp-qr = { path = "../../../crates/podapp-qr" }
 # 只读访问 Codex 会话：以宿主动作形式提供，程序舱沙箱碰不到 ~/.codex
 podapp-codex = { path = "../../../crates/podapp-codex" }
-# 打包：同样是宿主动作。压缩原语不该上桥 —— 桥上的能力对所有程序舱一律开放，
-# 而打包要读别的产物，得让清单逐条申报。
-podapp-zip = { path = "../../../crates/podapp-zip" }
 # MCP 桥：浮舱只用它数一下「接上之后 AI 多了几件能做的事」，
 # 真正的服务进程是随身带的 sidecar，不在这里跑。
 podapp-mcp = { path = "../../../crates/podapp-mcp" }
-# 调本机已装的命令行工具：同样是宿主动作，逐条申报。
-# 白名单在这个 crate 里，程序舱申报什么都越不出去。
-podapp-cli = { path = "../../../crates/podapp-cli" }
 # 工作流：把已装动作按顺序串起来。它不新增执行路径，只是按顺序调 headless::invoke。
 podapp-flow = { path = "../../../crates/podapp-flow" }
 tauri-plugin-updater = "2.10.1"
