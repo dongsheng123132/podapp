@@ -551,9 +551,21 @@ mod tests {
                 near.looks_like_a_real_window(),
                 "宿主所在屏工作区不合理: {near:?}"
             );
+            // **最大化的窗口本来就超出工作区**：Windows 会把它向外扩一个
+            // 缩放边框的宽度（本机实测 dx=dy=-9，窗口 2578×1558 而工作区 2048×1232）。
+            // 原来的 `>= near.x - 1` 对最大化窗口**永远为假** —— 这条断言潜伏了很久，
+            // 只有在宿主刚好是最大化时才露头，于是表现成「偶发失败」。
+            //
+            // 真正要防的是「算出宿主在另一块屏上」这种离谱结果，
+            // 所以判据换成**重叠**：窗口和工作区必须有交集。
+            let overlaps = w.rect.x < near.right()
+                && w.rect.right() > near.x
+                && w.rect.y < near.bottom()
+                && w.rect.bottom() > near.y;
             assert!(
-                w.rect.x >= near.x - 1 && w.rect.y >= near.y - 1,
-                "宿主不在它自己那块屏里?"
+                overlaps,
+                "宿主窗口和它自己那块屏没有交集？窗口 {:?} 工作区 {near:?}",
+                w.rect
             );
         }
 
