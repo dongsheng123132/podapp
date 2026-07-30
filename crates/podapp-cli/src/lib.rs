@@ -156,7 +156,7 @@ fn cap(mut s: String) -> (String, bool) {
 
 /// 跑一个程序。**没有 shell**，argv 直接给操作系统。
 fn run(program: &str, args: &[String], cwd: &Path) -> Result<Output, String> {
-    let mut child = Command::new(program)
+    let child = Command::new(program)
         .args(args)
         .current_dir(cwd)
         // 关掉 stdin：程序要是想问点什么，立刻拿到 EOF 而不是永远等着。

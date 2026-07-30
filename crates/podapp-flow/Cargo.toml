@@ -1,0 +1,12 @@
+[package]
+name = "podapp-flow"
+version = "0.1.0"
+description = "把几个已装动作串成一条工作流 —— 不含代码，只是一张步骤表"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# 一个第三方依赖都不引：用的全是运行时已经有的东西。
+podapp-runtime = { path = "../podapp-runtime" }
+serde_json.workspace = true
