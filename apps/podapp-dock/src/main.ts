@@ -385,6 +385,9 @@ function render(s: DockStatus) {
     const sub = document.createElement("div");
     sub.className = "sub";
     sub.textContent = pod.summary ?? pod.permissions.join("、");
+    // 每个 Pod 用自己的 accent 画一条左侧色条 —— 一长列里认出来靠颜色，
+    // 比读名字快。没声明 accent 的用默认线条色，不留空。
+    if (pod.accent) li.style.setProperty("--pod-accent", pod.accent);
     li.append(name, sub);
     li.onclick = () => {
       // 开程序舱窗口要等 WebView2 起来，几百毫秒到一两秒不等。
@@ -398,9 +401,13 @@ function render(s: DockStatus) {
   }));
 
   if (s.pods.length === 0) {
+    // 空状态不该只说「没有」。说清下一步该干什么 ——
+    // 一个只说「还没有 Pod」的界面把用户留在原地
     const li = document.createElement("li");
     li.className = "empty";
-    li.textContent = "还没有 Pod";
+    const b = document.createElement("b");
+    b.textContent = "还没有 Pod";
+    li.append(b, document.createTextNode("把 .pod 拖进来，或者点下面「制作 Pod」让 AI 给你写一个"));
     podList.append(li);
   }
 }
@@ -802,7 +809,21 @@ $("copySkinPrompt").onclick = async () => {
   }
 };
 
+// 拖动经过时让拖放区亮一下 —— 不然用户不知道能不能松手。
+// 用 dragenter/dragleave 计数：子元素也会触发这两个事件，
+// 不计数的话经过 <code> 就会闪一下灭掉。
+let dragDepth = 0;
+for (const [ev, fn] of [
+  ["dragenter", () => { if (++dragDepth === 1) drop.classList.add("over"); }],
+  ["dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; drop.classList.remove("over"); } }],
+  ["drop", () => { dragDepth = 0; drop.classList.remove("over"); }],
+] as const) {
+  window.addEventListener(ev, fn as EventListener);
+}
+
 listen<string[]>("dock://dropped", async (event) => {
+  dragDepth = 0;
+  drop.classList.remove("over");
   for (const path of event.payload) {
     const lower = path.toLowerCase();
     // 拖一张图集进来就装成宠物。现成宠物（Nyxie 那类）解压出来就是一张 webp，

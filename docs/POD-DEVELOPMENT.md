@@ -26,6 +26,10 @@
 
 1. 动作 ID 使用 `app.<slug>.<domain>.<verb>`，发布后不可随意改名。
 2. 增删改查等业务逻辑只写在 `actions.mjs`；GUI、AI、CLI 调同一个动作。
+   **签名是 `async (input, ctx) => {...}`** —— `input` 直接就是入参对象，
+   不要写成 `async ({ input }, ctx)`。写错了不会报错，只会让 `input` 变成
+   `undefined`，然后在第一次读字段时报一句 `Cannot read properties of undefined`，
+   而那条错看不出是签名的问题。
 3. 每个动作声明 `input_schema`、`effects`、`execution` 和 `bindings`，并支持无界面执行。
 4. 权限默认全关。只申请真实需要的权限：
    - 持久化数据：`permissions.fs.app_data: true`，用 `ctx.pod.storage.get/set`。
@@ -127,7 +131,7 @@ html, body { margin: 0; height: 100%; background: transparent; }
 ```js
 // actions.mjs —— 表达意图，不表达命令
 export const actions = {
-  "app.mytool.repo.status": async ({ input }, ctx) =>
+  "app.mytool.repo.status": async (input, ctx) =>
     ctx.pod.action("host.cli.git", { op: "status", cwd: input.dir }),
 };
 ```

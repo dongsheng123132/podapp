@@ -1,0 +1,37 @@
+{
+  "profile": "podapp/pod@0.1",
+  "pod": {
+    "id": "org.podapp.game.tictactoe",
+    "slug": "tictactoe",
+    "name": "跟 AI 下井字棋",
+    "version": "0.1.0",
+    "summary": "你点格子，AI 走 MCP 落子 —— 同一个动作，两个面",
+    "description": "一局井字棋，但棋盘只有一份。你在浮舱里点格子，旁边的 Codex 或 Claude 通过 MCP 调**同一个动作**落子。它不是「AI 版」和「人版」两套逻辑，是一套逻辑两个面 —— 这也是泊舟整个产品的样子。顺手也能一个人玩：AI 不落子，你就自己下两边。",
+    "author": "PodApp",
+    "homepage": "https://podapp.net/pods/tictactoe",
+    "license": "MIT",
+    "locales": ["zh-CN"],
+    "min_host_version": "0.1.0"
+  },
+  "action_parity": "./action-parity.json",
+  "package": {
+    "kind": "web",
+    "web": { "root": "web", "entry": "index.html", "actions": "actions.mjs" }
+  },
+  "ui": {
+    "icon": "lucide:grid-3x3",
+    "accent": "#27b58b",
+    "container": "float",
+    "window": { "width": 240, "height": 300 },
+    "home_dock": true,
+    "quick_actions": [
+      { "action": "app.tictactoe.game.reset", "label": "新开一局", "icon": "lucide:rotate-ccw" }
+    ]
+  },
+  "permissions": {
+    "ai": { "image_generate": false, "image_edit": false, "chat": false, "video_generate": false, "max_calls_per_run": 0 },
+    "fs": { "app_data": true, "save_dialog": false, "open_dialog": false },
+    "net": { "allow": [] },
+    "host_actions": []
+  }
+}

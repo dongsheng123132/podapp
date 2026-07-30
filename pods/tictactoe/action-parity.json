@@ -1,0 +1,56 @@
+{
+  "spec_version": "0.5.0",
+  "application": { "id": "org.podapp.game.tictactoe", "name": "跟 AI 下井字棋", "version": "0.1.0" },
+  "surfaces": [
+    { "id": "pod", "kind": "gui", "required_for_parity": true },
+    { "id": "cli", "kind": "cli", "required_for_parity": true },
+    { "id": "mcp", "kind": "api", "required_for_parity": true }
+  ],
+  "actions": [
+    {
+      "id": "app.tictactoe.game.state",
+      "title": "看棋盘",
+      "description": "Read the current board, whose turn it is, and whether someone already won. Call this before moving.",
+      "effects": { "class": "read", "risk": "low", "reversible": true, "confirmation": "never", "audit_required": false },
+      "execution": { "headless": true, "timeout_ms": 5000 },
+      "input_schema": { "type": "object", "additionalProperties": false, "properties": {} },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "board": { "type": "array", "description": "9 格，从左上到右下。空格是 null。" },
+          "turn": { "type": "string" },
+          "winner": { "type": ["string", "null"] },
+          "over": { "type": "boolean" },
+          "moves": { "type": "integer" }
+        }
+      },
+      "bindings": { "pod": "#board", "cli": "tictactoe state", "mcp": "app_tictactoe_game_state" }
+    },
+    {
+      "id": "app.tictactoe.game.move",
+      "title": "落一子",
+      "description": "Place your mark in one cell (0-8, left-to-right then top-to-bottom). Refuses if the cell is taken, the game is over, or it is not your turn.",
+      "effects": { "class": "write", "risk": "low", "reversible": false, "confirmation": "never", "audit_required": false },
+      "execution": { "headless": true, "timeout_ms": 5000 },
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["cell"],
+        "properties": {
+          "cell": { "type": "integer", "minimum": 0, "maximum": 8, "description": "0-8，先左右再上下" },
+          "as": { "type": "string", "enum": ["X", "O"], "description": "落哪一方。不给就按当前该谁走。" }
+        }
+      },
+      "bindings": { "pod": "#board", "cli": "tictactoe move", "mcp": "app_tictactoe_game_move" }
+    },
+    {
+      "id": "app.tictactoe.game.reset",
+      "title": "新开一局",
+      "description": "Clear the board and start over. X moves first.",
+      "effects": { "class": "write", "risk": "low", "reversible": false, "confirmation": "never", "audit_required": false },
+      "execution": { "headless": true, "timeout_ms": 5000 },
+      "input_schema": { "type": "object", "additionalProperties": false, "properties": {} },
+      "bindings": { "pod": "#reset", "cli": "tictactoe reset", "mcp": "app_tictactoe_game_reset" }
+    }
+  ]
+}

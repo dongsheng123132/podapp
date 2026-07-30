@@ -485,3 +485,67 @@ button { font: inherit; letter-spacing: 0; }
 }
 .flow-confirm p { margin: 0 0 8px; font-size: 11px; }
 .flow-prompt { width: calc(100% - 20px); margin: 8px 10px 0; }
+
+/* ── 观感打磨（0.2.0）─────────────────────────────────────────
+   全是低风险的视觉修正，不动布局逻辑。挑的都是「一眼就觉得糙」的地方。 */
+
+/* 1. 底部三个入口原来是三块同样的大方块，视觉上分不出主次。
+      「制作 Pod」是主行动，另两个是次要 —— 让它们矮一点、淡一点。 */
+.foot .developer-launch + .developer-launch {
+  margin-top: 6px;
+  min-height: 40px;
+}
+.foot .developer-launch + .developer-launch > span:first-child {
+  width: 22px; height: 22px; font-size: 15px;
+  background: transparent; border: 1px solid var(--line);
+}
+
+/* 2. 按钮按下去没有任何反馈，点起来像没响应。给一个 1px 的位移。 */
+.developer-launch:active,
+.primary:active,
+.secondary:active,
+.icon:active,
+.skin-row:active { transform: translateY(1px); }
+
+/* 3. 悬停和聚焦原来只有边框变色，键盘用户看不见焦点。
+      焦点环用 accent，且**不覆盖**已有的 hover 样式。 */
+.developer-launch:focus-visible,
+.primary:focus-visible,
+.secondary:focus-visible,
+.icon:focus-visible,
+.back:focus-visible,
+.skin-row:focus-visible,
+.flow-json:focus-visible,
+.pod:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* 4. Pod 列表项没有左侧色条，一长列全一样。用每个 Pod 自己的 accent
+      做一条 2px 的竖线 —— 认得出来靠的是颜色，不是读名字。 */
+.pod {
+  position: relative;
+  padding-left: 14px;
+  border-radius: 6px;
+  transition: background .12s;
+}
+.pod::before {
+  content: "";
+  position: absolute;
+  left: 4px; top: 10px; bottom: 10px;
+  width: 2px; border-radius: 2px;
+  background: var(--pod-accent, var(--line));
+}
+.pod:hover::before { background: var(--pod-accent, var(--accent)); }
+
+/* 5. 拖放区在拖动经过时没有任何提示，用户不知道能不能松手。 */
+.drop { transition: border-color .12s, color .12s, background .12s; }
+.drop.over {
+  border-color: var(--accent);
+  color: var(--fg);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+/* 6. 空列表那句「还没有 Pod」太干。给一句能照着做的下一步。 */
+.empty { line-height: 1.7; }
+.empty b { display: block; color: var(--fg); font-weight: 550; margin-bottom: 2px; }

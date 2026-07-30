@@ -1,6 +1,6 @@
 [package]
 name = "podapp-dock"
-version = "0.1.1"
+version = "0.2.0"
 description = "PodApp 浮舱 —— 贴在 AI 工作界面旁边的确定性动作舱"
 edition = "2021"
 license = "Apache-2.0"
