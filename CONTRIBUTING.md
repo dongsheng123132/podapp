@@ -3,13 +3,16 @@
 PodApp 接受代码、Pod、皮肤、翻译、文档和可复现的 Bug 报告。请让一个 PR 只解决一件事，
 便于验证、回滚和署名。
 
+参与本项目即表示同意遵守 [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md)。
+
 ## 选择一条贡献路径
 
 | 路径 | 改哪里 | 是否需要 Rust |
 |---|---|---|
 | 新皮肤 | `apps/podapp-dock/src/skins/` | 否 |
 | 新 Pod | `pods/<slug>/` | 否 |
-| 翻译与文档 | `README_*.md`、`docs/`、界面文案 | 否 |
+| 翻译与文档 | `README_*.md`、`MANIFESTO*`、`PRINCIPLES*`、`docs/` | 否 |
+| 签署 AI GUI 宣言 | `SIGNATORIES.md` | 否 |
 | 浮舱界面 | `apps/podapp-dock/src/` | 否 |
 | 协议与运行时 | `crates/` | 是 |
 
@@ -48,6 +51,13 @@ cargo run -p podapp-win --example probe -- --verify
 5. 不提交密钥、真实用户数据、构建目录或个人机器路径。
 6. 界面至少支持简体中文；新增英文文案时同步考虑 `README_EN.md`。
 7. 视觉变化附一张清晰截图；不要用截图代替业务测试。
+8. 讨论与评审遵守 [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md)。
+
+## 签署 AI GUI 宣言
+
+阅读 [`MANIFESTO.zh-CN.md`](./MANIFESTO.zh-CN.md) 后，可以通过 PR 在
+[`SIGNATORIES.md`](./SIGNATORIES.md) 对应表格增加一行。只提交你自己的签名；项目或组织签署
+应由所有者或获得授权的代表提交。签署不要求认同 PodApp 当前的每一项实现选择。
 
 提交即表示贡献按仓库 Apache-2.0 许可发布。安全问题不要开公开 Issue，请按
 [`SECURITY.md`](./SECURITY.md) 报告。
