@@ -2,6 +2,8 @@
 //
 // 这个程序舱的产出**不是图**，是一份让 agent 不必猜的任务书。图只是给人看的旁证。
 
+import { ACTION, defineActions } from "./action-parity.generated.mjs";
+
 /** 画一个矩形描边。宿主原语里只有填充矩形，描边就是四条细填充。 */
 async function strokeRect(pod, id, r, color, thick) {
     const t = Math.max(1, Math.round(thick));
@@ -23,8 +25,8 @@ async function badge(pod, id, r, color, size) {
     await pod.image.fillRect(id, { x: r.x, y: Math.max(0, r.y - s), w: s, h: s }, color, {});
 }
 
-export default {
-    "app.annotate.task.build": async (input, ctx) => {
+export default defineActions({
+    [ACTION.APP_ANNOTATE_TASK_BUILD]: async (input, ctx) => {
         const pod = ctx.pod;
         const list = input.annotations ?? [];
         if (list.length === 0) {
@@ -59,7 +61,7 @@ export default {
         const overlayUrl = await pod.image.encode(overlay.id);
         const art = await pod.artifact.emit({
             kind: "image",
-            action: "app.annotate.task.build",
+            action: ACTION.APP_ANNOTATE_TASK_BUILD,
             data: overlayUrl,
             message: `${regions.length} 处标注 · ${src.w}×${src.h}`,
         });
@@ -103,4 +105,4 @@ export default {
             message: `${regions.length} 处标注已生成任务`,
         };
     },
-};
+});

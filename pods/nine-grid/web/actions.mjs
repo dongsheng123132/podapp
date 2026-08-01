@@ -7,6 +7,8 @@
 // 图像数学一律走宿主原语（pod.image.*）：Node 里没有 canvas，而且更要紧的是，
 // 界面和无头两条路必须算出**同一个结果**。
 
+import { ACTION, defineActions } from "./action-parity.generated.mjs";
+
 /**
  * 均分切割的格子坐标。
  *
@@ -34,8 +36,8 @@ function tiles(w, h, rows, cols, gap) {
   return out;
 }
 
-export default {
-  "app.nine-grid.image.split": async (input, ctx) => {
+export default defineActions({
+  [ACTION.APP_NINE_GRID_IMAGE_SPLIT]: async (input, ctx) => {
     const pod = ctx.pod;
     const rows = input.rows ?? 3;
     const cols = input.cols ?? 3;
@@ -61,7 +63,7 @@ export default {
       // 拿到的应该是一行人话加一个路径，不是九张图的 base64 糊在终端里。
       const art = await pod.artifact.emit({
         kind: "image",
-        action: "app.nine-grid.image.split",
+        action: ACTION.APP_NINE_GRID_IMAGE_SPLIT,
         data: dataUrl,
         message: `第 ${t.row} 行第 ${t.col} 列 · ${t.w}×${t.h}`,
       });
@@ -97,7 +99,7 @@ export default {
         (zip ? `，已打包成一个 zip` : ""),
     };
   },
-};
+});
 
 // 供界面复用同一份切割计划来画预览线 —— 预览和实际切割必须来自同一个函数，
 // 否则「预览看着对、切出来不对」是最难解释的一类 bug。

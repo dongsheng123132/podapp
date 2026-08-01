@@ -9,6 +9,8 @@
  * 所以这份文件里没有任何「谁在调我」的分支。它只知道棋盘和规则。
  */
 
+import { ACTION, defineActions } from "./action-parity.generated.mjs";
+
 const KEY = "board";
 
 /** 八条连线。写死是因为规则不会变，算出来反而更难读。 */
@@ -61,10 +63,10 @@ function view(board) {
   };
 }
 
-export const actions = {
-  "app.tictactoe.game.state": async (_inv, ctx) => view(await load(ctx)),
+export const actions = defineActions({
+  [ACTION.APP_TICTACTOE_GAME_STATE]: async (_inv, ctx) => view(await load(ctx)),
 
-  "app.tictactoe.game.move": async (input, ctx) => {
+  [ACTION.APP_TICTACTOE_GAME_MOVE]: async (input, ctx) => {
     const board = await load(ctx);
     const cell = Number(input.cell);
 
@@ -90,10 +92,10 @@ export const actions = {
     return { ...after, message: `${want} 落在第 ${cell} 格 · ${after.message}` };
   },
 
-  "app.tictactoe.game.reset": async (_inv, ctx) => {
+  [ACTION.APP_TICTACTOE_GAME_RESET]: async (_inv, ctx) => {
     await ctx.pod.storage.set(KEY, empty());
     return { ...view(empty()), message: "新开一局，X 先走" };
   },
-};
+});
 
 export default actions;

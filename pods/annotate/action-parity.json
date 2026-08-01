@@ -55,6 +55,7 @@
       },
       "execution": {
         "headless": true,
+        "headless_evidence": "cargo:test:podapp-runtime/official_pods::annotate_turns_boxes_into_a_task_an_agent_can_follow",
         "idempotent": true,
         "cancellable": false,
         "timeout_ms": 60000

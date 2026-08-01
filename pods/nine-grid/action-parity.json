@@ -59,6 +59,7 @@
       },
       "execution": {
         "headless": true,
+        "headless_evidence": "cargo:test:podapp-runtime/official_pods::nine_grid_splits_correctly_with_no_ui",
         "idempotent": true,
         "cancellable": false,
         "timeout_ms": 120000

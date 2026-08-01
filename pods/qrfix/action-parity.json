@@ -34,7 +34,7 @@
       },
       "output_schema": { "type": "object" },
       "effects": { "class": "read", "risk": "low", "reversible": true, "confirmation": "never", "audit_required": false },
-      "execution": { "headless": true, "idempotent": true, "cancellable": false, "timeout_ms": 120000 },
+      "execution": { "headless": true, "headless_evidence": "cargo:test:podapp-qr/qrfix_pod::a_pasted_code_is_actually_scannable", "idempotent": true, "cancellable": false, "timeout_ms": 120000 },
       "bindings": [
         { "surface": "pod", "target": "pod-rpc:action/app.qrfix.code.replace" },
         { "surface": "cli", "target": "cli:action run app.qrfix.code.replace --json" }

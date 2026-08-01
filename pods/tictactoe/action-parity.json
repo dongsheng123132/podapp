@@ -1,37 +1,49 @@
 {
   "spec_version": "0.5.0",
-  "application": { "id": "org.podapp.game.tictactoe", "name": "跟 AI 下井字棋", "version": "0.1.0" },
+  "application": {
+    "id": "org.podapp.game.tictactoe",
+    "name": "跟 AI 下井字棋",
+    "version": "0.1.0"
+  },
   "surfaces": [
     { "id": "pod", "kind": "gui", "required_for_parity": true },
     { "id": "cli", "kind": "cli", "required_for_parity": true },
-    { "id": "mcp", "kind": "api", "required_for_parity": true }
+    { "id": "mcp", "kind": "mcp", "required_for_parity": true }
   ],
   "actions": [
     {
       "id": "app.tictactoe.game.state",
       "title": "看棋盘",
       "description": "Read the current board, whose turn it is, and whether someone already won. Call this before moving.",
-      "effects": { "class": "read", "risk": "low", "reversible": true, "confirmation": "never", "audit_required": false },
-      "execution": { "headless": true, "timeout_ms": 5000 },
       "input_schema": { "type": "object", "additionalProperties": false, "properties": {} },
       "output_schema": {
         "type": "object",
         "properties": {
           "board": { "type": "array", "description": "9 格，从左上到右下。空格是 null。" },
-          "turn": { "type": "string" },
+          "turn": { "type": ["string", "null"] },
           "winner": { "type": ["string", "null"] },
           "over": { "type": "boolean" },
           "moves": { "type": "integer" }
         }
       },
-      "bindings": { "pod": "#board", "cli": "tictactoe state", "mcp": "app_tictactoe_game_state" }
+      "effects": { "class": "read", "risk": "low", "reversible": true, "confirmation": "never", "audit_required": false },
+      "execution": {
+        "headless": true,
+        "headless_evidence": "cargo:test:podapp-runtime/official_pods::tictactoe_actions_share_one_headless_board",
+        "idempotent": true,
+        "cancellable": false,
+        "timeout_ms": 5000
+      },
+      "bindings": [
+        { "surface": "pod", "target": "pod-rpc:action/app.tictactoe.game.state" },
+        { "surface": "cli", "target": "cli:action run app.tictactoe.game.state --json" },
+        { "surface": "mcp", "target": "mcp:app_tictactoe_game_state" }
+      ]
     },
     {
       "id": "app.tictactoe.game.move",
       "title": "落一子",
       "description": "Place your mark in one cell (0-8, left-to-right then top-to-bottom). Refuses if the cell is taken, the game is over, or it is not your turn.",
-      "effects": { "class": "write", "risk": "low", "reversible": false, "confirmation": "never", "audit_required": false },
-      "execution": { "headless": true, "timeout_ms": 5000 },
       "input_schema": {
         "type": "object",
         "additionalProperties": false,
@@ -41,16 +53,40 @@
           "as": { "type": "string", "enum": ["X", "O"], "description": "落哪一方。不给就按当前该谁走。" }
         }
       },
-      "bindings": { "pod": "#board", "cli": "tictactoe move", "mcp": "app_tictactoe_game_move" }
+      "output_schema": { "type": "object" },
+      "effects": { "class": "write", "risk": "low", "reversible": false, "confirmation": "never", "audit_required": false },
+      "execution": {
+        "headless": true,
+        "headless_evidence": "cargo:test:podapp-runtime/official_pods::tictactoe_actions_share_one_headless_board",
+        "idempotent": false,
+        "cancellable": false,
+        "timeout_ms": 5000
+      },
+      "bindings": [
+        { "surface": "pod", "target": "pod-rpc:action/app.tictactoe.game.move" },
+        { "surface": "cli", "target": "cli:action run app.tictactoe.game.move --json" },
+        { "surface": "mcp", "target": "mcp:app_tictactoe_game_move" }
+      ]
     },
     {
       "id": "app.tictactoe.game.reset",
       "title": "新开一局",
       "description": "Clear the board and start over. X moves first.",
-      "effects": { "class": "write", "risk": "low", "reversible": false, "confirmation": "never", "audit_required": false },
-      "execution": { "headless": true, "timeout_ms": 5000 },
       "input_schema": { "type": "object", "additionalProperties": false, "properties": {} },
-      "bindings": { "pod": "#reset", "cli": "tictactoe reset", "mcp": "app_tictactoe_game_reset" }
+      "output_schema": { "type": "object" },
+      "effects": { "class": "write", "risk": "low", "reversible": false, "confirmation": "never", "audit_required": false },
+      "execution": {
+        "headless": true,
+        "headless_evidence": "cargo:test:podapp-runtime/official_pods::tictactoe_actions_share_one_headless_board",
+        "idempotent": true,
+        "cancellable": false,
+        "timeout_ms": 5000
+      },
+      "bindings": [
+        { "surface": "pod", "target": "pod-rpc:action/app.tictactoe.game.reset" },
+        { "surface": "cli", "target": "cli:action run app.tictactoe.game.reset --json" },
+        { "surface": "mcp", "target": "mcp:app_tictactoe_game_reset" }
+      ]
     }
   ]
 }

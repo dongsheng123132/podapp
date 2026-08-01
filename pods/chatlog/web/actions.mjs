@@ -6,6 +6,8 @@
 // 但格式转换留在这里，不放宿主：改导出样式是最常见的需求，
 // 放在 Pod 里意味着改一个文件重打包就行，不用动宿主也不用发新版。
 
+import { ACTION, defineActions } from "./action-parity.generated.mjs";
+
 const esc = (s) =>
   String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
 
@@ -81,13 +83,13 @@ ${rows}
 </body></html>`;
 }
 
-export default {
-  "app.chatlog.session.list": async (input, ctx) => {
+export default defineActions({
+  [ACTION.APP_CHATLOG_SESSION_LIST]: async (input, ctx) => {
     const r = await ctx.pod.action("host.codex.session.list", { limit: input.limit ?? 50 });
     return { ok: true, count: r.count, sessions: r.sessions, message: `找到 ${r.count} 个会话` };
   },
 
-  "app.chatlog.session.export": async (input, ctx) => {
+  [ACTION.APP_CHATLOG_SESSION_EXPORT]: async (input, ctx) => {
     const pod = ctx.pod;
     let meta, msgs;
 
@@ -113,7 +115,7 @@ export default {
 
     const art = await pod.artifact.emit({
       kind: "text",
-      action: "app.chatlog.session.export",
+      action: ACTION.APP_CHATLOG_SESSION_EXPORT,
       // artifact 收的是 data URL；文本也走同一条路，宿主那边只认这一种入口
       data: "data:text/plain;base64," + btoa(unescape(encodeURIComponent(text))),
       message: `${title} · ${msgs.length} 条 · ${fmt}`,
@@ -129,6 +131,6 @@ export default {
       message: `已导出「${title}」${msgs.length} 条消息`,
     };
   },
-};
+});
 
 export { parseJsonl, toMarkdown, toHtml };

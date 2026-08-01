@@ -13,12 +13,14 @@
   podapp.json
   action-parity.json
   web/
+    action-parity.generated.mjs
     index.html
     actions.mjs
 ```
 
 - `podapp.json`：身份、Web 入口、窗口尺寸、权限。
 - `action-parity.json`：所有可由人或 AI 执行的业务动作及 JSON Schema。
+- `web/action-parity.generated.mjs`：从动作清单生成；只引用，不手改。
 - `web/actions.mjs`：业务动作唯一实现，不读 DOM。
 - `web/index.html`：只负责界面和交互，通过 `pod.action(actionId, input)` 调动作。
 
@@ -44,6 +46,29 @@
    用户机器上已经有 AI 了（Codex / Claude Code 就在旁边），它们通过 MCP 调你的动作。
    **分工是：你负责确定性的那半（采集、转换、校验、落盘），AI 负责生成和理解。**
    要「AI 帮我改这张图」的效果，正确形态是让 AI 来调你的动作，而不是你去调模型。
+10. `action-parity.json` 是 Action ID 的唯一真相源。写完或修改动作后运行
+    `npx podapp generate <Pod目录>`，在 `actions.mjs` 和 `index.html` 里导入 `ACTION`，
+    不再重复手写字符串；处理器必须用 `defineActions({...})` 注册。
+
+```js
+import { ACTION, defineActions } from "./action-parity.generated.mjs";
+
+export const actions = defineActions({
+  [ACTION.APP_MYTOOL_NOTE_LIST]: async (input, ctx) => {
+    return { ok: true, notes: await ctx.pod.storage.get("notes") ?? [] };
+  },
+});
+```
+
+```html
+<script type="module">
+  import { ACTION } from "./action-parity.generated.mjs";
+  document.querySelector("button").onclick = () => pod.action(ACTION.APP_MYTOOL_NOTE_LIST, {});
+</script>
+```
+
+这样新增、删除或改名动作时，漏处理器、额外处理器、GUI 旧 ID 和生成物漂移会在检查阶段失败，
+不用等到人点击或 AI 调用时才发现。
 
 ## 最小清单示例
 
@@ -168,6 +193,8 @@ export const actions = {
 在 PodApp Protocol CLI 所在仓库执行：
 
 ```powershell
+node ..\podapp-protocol\bin\podapp.mjs generate <Pod目录>
+node ..\podapp-protocol\bin\podapp.mjs generate <Pod目录> --check --json
 node ..\podapp-protocol\bin\podapp.mjs validate <Pod目录> --json
 node ..\podapp-protocol\bin\podapp.mjs pack <Pod目录>
 ```
@@ -175,6 +202,7 @@ node ..\podapp-protocol\bin\podapp.mjs pack <Pod目录>
 必须满足：
 
 - `validate` 输出 `"ok": true`。
+- `generate --check` 输出 `"ok": true`，生成 SDK 没有漂移。
 - 至少直接无头调用一次主要动作，验证真实返回值和持久化结果。
 - 打出 `.pod` 文件；把它拖进泊舟浮舱即可安装。
 - 最终回复列出动作 ID、申请的权限、验证结果和 `.pod` 文件路径。

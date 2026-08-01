@@ -373,6 +373,7 @@
     </main>
 
     <script type="module">
+      import { ACTION } from "./action-parity.generated.mjs";
       import { tiles } from "./actions.mjs";
 
       const $ = (id) => document.getElementById(id);
@@ -518,7 +519,7 @@
         $("results").hidden = true;
         setStatus("正在按原图像素切片…");
         try {
-          const result = await pod.action("app.nine-grid.image.split", {
+          const result = await pod.action(ACTION.APP_NINE_GRID_IMAGE_SPLIT, {
             image: state.image,
             ...values(),
           });

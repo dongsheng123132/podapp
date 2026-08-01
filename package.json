@@ -1,0 +1,17 @@
+{
+  "name": "podapp-workspace-tools",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "action-sdk:generate": "node tools/action-sdk.mjs",
+    "action-sdk:check": "node tools/action-sdk.mjs --check",
+    "action-sdk:test": "node --test tools/action-sdk.test.mjs",
+    "action-parity:validate": "node tools/validate-action-parity.mjs",
+    "check:actions": "npm run action-sdk:check && npm run action-sdk:test && npm run action-parity:validate",
+    "sidecar:build": "node scripts/build-sidecars.mjs"
+  },
+  "devDependencies": {
+    "action-parity": "https://github.com/dongsheng123132/action-parity/releases/download/v0.6.1/action-parity-0.6.1.tgz",
+    "podapp-protocol": "https://github.com/dongsheng123132/podapp-protocol/releases/download/v0.2.0/podapp-protocol-0.2.0.tgz"
+  }
+}
