@@ -11,7 +11,7 @@
     "sidecar:build": "node scripts/build-sidecars.mjs"
   },
   "devDependencies": {
-    "action-parity": "https://github.com/dongsheng123132/action-parity/releases/download/v0.6.1/action-parity-0.6.1.tgz",
+    "action-parity": "https://github.com/dongsheng123132/action-parity/releases/download/v0.6.2/action-parity-0.6.2.tgz",
     "podapp-protocol": "https://github.com/dongsheng123132/podapp-protocol/releases/download/v0.2.0/podapp-protocol-0.2.0.tgz"
   }
 }
