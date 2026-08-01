@@ -30,7 +30,7 @@ npm run check:actions
 ```
 
 `check:actions` 同时验证六份生成物、加载六个处理器注册表，执行缺少/额外/非函数处理器的
-反向契约测试，并用 ActionParity 0.6.1
+反向契约测试，并用 ActionParity 0.6.2
 验证全部 Manifest，并确认 `cargo:test:` 引用确实对应仓库里的测试函数。命令支持稳定退出码；底层工具也提供 JSON 输出，适合 Codex、
 Claude Code、Kimi Code 和 Hermes 直接调用。
 
