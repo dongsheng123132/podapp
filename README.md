@@ -49,7 +49,7 @@ PodApp 是这套思想的一种开放参考实现，不是宣言本身。阅读
 [`规范导航`](./SPEC.md) ·
 [`签署宣言`](./SIGNATORIES.md)。
 
-## 内置 5 个程序舱
+## 内置 6 个程序舱
 
 | 程序舱 | 它替你做什么 |
 |---|---|
@@ -58,6 +58,7 @@ PodApp 是这套思想的一种开放参考实现，不是宣言本身。阅读
 | **图片标注** | 在图上框一下写清楚要改哪里，省得跟 AI 描述「上面那个标题」 |
 | **对话导出** | 把 Codex 会话导成 Markdown / HTML |
 | **备忘贴** | 随手记一笔，自动保存，AI 也能增删查 |
+| **跟 AI 下井字棋** | 人点 GUI、AI 调 MCP，读盘、落子、重置共用同一份棋盘动作 |
 
 装一个 `.pod` 包，它**自动成为一个 MCP 工具**。
 
@@ -83,7 +84,7 @@ flowchart LR
 #   https://github.com/dongsheng123132/podapp/releases/latest
 
 # 开发者
-cargo test --workspace                    # 运行时 + 五个 Pod + MCP 桥 + 打包
+cargo test --workspace                    # 运行时 + 六个 Pod + MCP 桥 + 打包
 cargo run --example selftest -p podapp-runtime   # 端到端：装 → 列 → 跑 → 卸，两种方言各一遍
 
 cd apps/podapp-dock && pnpm install && pnpm build
@@ -188,7 +189,7 @@ crates/podapp-codex/     读 Codex 会话 ├ 可插拔，不进核心；删一�
 crates/podapp-zip/       打包能力     ┘
 crates/podapp-mcp/       装一个 .pod 自动成为 MCP 工具
 apps/podapp-dock/        浮舱壳：Tauri 2，吸附 / 热键 / 拖入即装 / podapp:// 协议
-pods/                    5 个官方程序舱源码，随桌面壳首次启动自动安装
+pods/                    6 个官方程序舱源码，随桌面壳首次启动自动安装
 scripts/build-site.mjs   podapp.net 官网，从 pods/*/podapp.json 生成
 ```
 
@@ -196,12 +197,14 @@ scripts/build-site.mjs   podapp.net 官网，从 pods/*/podapp.json 生成
 
 ```bash
 npx podapp create my-pod     # 起骨架，自带自检
+npx podapp generate my-pod   # 从 action-parity.json 生成 Action 常量和完整性闸门
 npx podapp pack my-pod       # 出一个 .pod，双击安装
 ```
 
 浮舱底部有「制作 Pod」入口，可以把完整开发指令直接复制给 Codex 或 Claude。
 规范见 [`docs/POD-DEVELOPMENT.md`](./docs/POD-DEVELOPMENT.md)；
 [`pods/memo`](./pods/memo) 是一份可运行的最小参考实现。
+本仓库的首次量化试点见 [`docs/ACTION-SDK-PILOT.md`](./docs/ACTION-SDK-PILOT.md)。
 
 ## 一起做
 

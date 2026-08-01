@@ -421,6 +421,7 @@
     </main>
 
     <script type="module">
+      import { ACTION } from "./action-parity.generated.mjs";
       const $ = (id) => document.getElementById(id);
       const state = {
         sessions: [],
@@ -551,7 +552,7 @@
         $("listStatus").textContent = "正在读取…";
         $("refreshBtn").disabled = true;
         try {
-          const result = await pod.action("app.chatlog.session.list", { limit: 120 });
+          const result = await pod.action(ACTION.APP_CHATLOG_SESSION_LIST, { limit: 120 });
           state.sessions = result.sessions || [];
           renderSessions();
           if (!state.selected && !state.jsonl && state.sessions[0]) selectSession(state.sessions[0]);
@@ -619,7 +620,7 @@
             ...($("customTitle").value.trim() ? { title: $("customTitle").value.trim() } : {}),
             ...(state.jsonl ? { jsonl: state.jsonl } : { session: state.selected.id }),
           };
-          const result = await pod.action("app.chatlog.session.export", input);
+          const result = await pod.action(ACTION.APP_CHATLOG_SESSION_EXPORT, input);
           $("resultTitle").textContent = `「${result.title}」导出完成`;
           $("resultMeta").textContent = `${result.count} 条消息 · ${result.format.toUpperCase()} · ${Math.max(1, Math.round(result.bytes / 1024))} KB`;
           $("resultPath").textContent = result.artifact.path || result.artifact.id;

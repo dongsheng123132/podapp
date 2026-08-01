@@ -217,6 +217,7 @@
     </main>
 
     <script type="module">
+      import { ACTION } from "./action-parity.generated.mjs";
       const $ = (id) => document.getElementById(id);
       const state = { notes: [], current: null, color: "yellow", timer: 0, saving: null, deleteArmed: false };
 
@@ -305,7 +306,7 @@
         state.saving = (async () => {
           setStatus("保存中…");
           try {
-            const result = await pod.action("app.memo.note.save", {
+            const result = await pod.action(ACTION.APP_MEMO_NOTE_SAVE, {
               id: state.current?.id,
               title,
               body,
@@ -331,7 +332,7 @@
 
       async function loadNotes(keepSelection = false) {
         try {
-          const result = await pod.action("app.memo.note.list", {});
+          const result = await pod.action(ACTION.APP_MEMO_NOTE_LIST, {});
           state.notes = result.notes;
           const selected = keepSelection
             ? state.notes.find((note) => note.id === state.current?.id)
@@ -359,7 +360,7 @@
           return;
         }
         try {
-          await pod.action("app.memo.note.remove", { id: state.current.id });
+          await pod.action(ACTION.APP_MEMO_NOTE_REMOVE, { id: state.current.id });
           state.notes = state.notes.filter((note) => note.id !== state.current.id);
           select(state.notes[0] ?? null);
           setStatus("已删除");

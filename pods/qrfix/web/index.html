@@ -603,6 +603,7 @@
     </dialog>
 
     <script type="module">
+      import { ACTION } from "./action-parity.generated.mjs";
       const $ = (id) => document.getElementById(id);
       const state = {
         poster: null,
@@ -972,7 +973,7 @@
           };
           if (state.qrMode === "text") input.qr_text = state.qrText.trim();
           else input.qr_image = state.qrData;
-          const r = await pod.action("app.qrfix.code.replace", input);
+          const r = await pod.action(ACTION.APP_QRFIX_CODE_REPLACE, input);
           $("resultImg").src = `/artifact/${encodeURIComponent(r.artifact.id)}`;
           $("resultCopy").textContent = r.scanned_text ? `识别内容：${r.scanned_text}` : "成品已进入收件箱";
           $("result").hidden = false;

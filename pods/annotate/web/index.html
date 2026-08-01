@@ -405,6 +405,7 @@
     </main>
 
     <script type="module">
+      import { ACTION } from "./action-parity.generated.mjs";
       const $ = (id) => document.getElementById(id);
       const state = {
         image: null,
@@ -655,7 +656,7 @@
         $("result").hidden = true;
         setStatus("正在生成编号标注图和结构化任务书…");
         try {
-          const result = await pod.action("app.annotate.task.build", {
+          const result = await pod.action(ACTION.APP_ANNOTATE_TASK_BUILD, {
             image: state.image,
             annotations: state.boxes.map((box) => ({
               x: Math.round(box.x),

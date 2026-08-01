@@ -71,7 +71,8 @@
     </div>
   </div>
 
-<script>
+<script type="module">
+import { ACTION } from "./action-parity.generated.mjs";
 const LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
 const boardEl = document.getElementById("board");
 const msgEl = document.getElementById("msg");
@@ -111,11 +112,11 @@ function paint(s) {
 // 界面这边**不算胜负、不判轮次**，那些只在 actions.mjs 里有一份。
 const call = (id, input) => window.pod.action(id, input || {});
 
-async function refresh() { paint(await call("app.tictactoe.game.state")); }
-async function move(cell) { paint(await call("app.tictactoe.game.move", { cell })); }
+async function refresh() { paint(await call(ACTION.APP_TICTACTOE_GAME_STATE)); }
+async function move(cell) { paint(await call(ACTION.APP_TICTACTOE_GAME_MOVE, { cell })); }
 
 document.getElementById("reset").onclick = async () =>
-  paint(await call("app.tictactoe.game.reset"));
+  paint(await call(ACTION.APP_TICTACTOE_GAME_RESET));
 document.getElementById("close").onclick = () => window.pod.win.close();
 
 refresh();

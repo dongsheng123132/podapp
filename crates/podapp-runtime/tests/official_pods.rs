@@ -304,6 +304,51 @@ fn memo_can_be_managed_by_gui_and_agents_through_the_same_actions() {
     });
 }
 
+#[test]
+fn tictactoe_actions_share_one_headless_board() {
+    if !have_node() {
+        println!("跳过：本机没有 Node");
+        return;
+    }
+    in_sandbox("tictactoe", |_sandbox| {
+        podapp_runtime::install::install_from_path(&repo_root().join("pods/tictactoe"), "test")
+            .unwrap_or_else(|e| panic!("装不上 tictactoe: {e}"));
+
+        let initial: Value =
+            podapp_runtime::headless::run_action("app.tictactoe.game.state", json!({}))
+                .unwrap_or_else(|e| panic!("读不到初始棋盘: {e}"));
+        assert_eq!(
+            initial["board"],
+            json!([null, null, null, null, null, null, null, null, null])
+        );
+        assert_eq!(initial["turn"], "X");
+
+        let first: Value = podapp_runtime::headless::run_action(
+            "app.tictactoe.game.move",
+            json!({ "cell": 0, "as": "X" }),
+        )
+        .unwrap_or_else(|e| panic!("X 落子失败: {e}"));
+        assert_eq!(first["board"][0], "X");
+        assert_eq!(first["turn"], "O");
+
+        let second: Value = podapp_runtime::headless::run_action(
+            "app.tictactoe.game.move",
+            json!({ "cell": 4, "as": "O" }),
+        )
+        .unwrap_or_else(|e| panic!("O 落子失败: {e}"));
+        assert_eq!(second["board"][0], "X");
+        assert_eq!(second["board"][4], "O");
+        assert_eq!(second["moves"], 2);
+
+        let reset: Value =
+            podapp_runtime::headless::run_action("app.tictactoe.game.reset", json!({}))
+                .unwrap_or_else(|e| panic!("重置棋盘失败: {e}"));
+        assert_eq!(reset["board"], initial["board"]);
+        assert_eq!(reset["turn"], "X");
+        assert_eq!(reset["moves"], 0);
+    });
+}
+
 /// 跑一条 `podapp` CLI 命令，返回 stdout 第一行（CLI 约定：结果走 stdout、日志走 stderr）。
 fn podapp_cli(cwd: &std::path::Path, args: &[&str]) -> Result<String, String> {
     let cli = repo_root().join("../podapp-protocol/bin/podapp.mjs");

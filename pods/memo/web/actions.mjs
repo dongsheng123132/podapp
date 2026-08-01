@@ -1,4 +1,6 @@
 // 备忘贴动作核心。这里不碰 DOM，GUI、CLI 和 AI 无头调用共用这一份实现。
+import { ACTION, defineActions } from "./action-parity.generated.mjs";
+
 const STORAGE_KEY = "notes";
 const COLORS = new Set(["yellow", "green", "blue", "rose"]);
 
@@ -35,8 +37,8 @@ function noteId() {
   return `note-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export default {
-  "app.memo.note.list": async (input, ctx) => {
+export default defineActions({
+  [ACTION.APP_MEMO_NOTE_LIST]: async (input, ctx) => {
     const query = String(input.query ?? "").trim().toLocaleLowerCase();
     const all = await readNotes(ctx.pod);
     const notes = query
@@ -45,7 +47,7 @@ export default {
     return { ok: true, count: notes.length, notes, message: `找到 ${notes.length} 条备忘` };
   },
 
-  "app.memo.note.save": async (input, ctx) => {
+  [ACTION.APP_MEMO_NOTE_SAVE]: async (input, ctx) => {
     const notes = await readNotes(ctx.pod);
     const requestedId = String(input.id ?? "").trim();
     const existing = requestedId ? notes.find((note) => note.id === requestedId) : null;
@@ -65,7 +67,7 @@ export default {
     return { ok: true, note, count: next.length, message: existing ? "备忘已更新" : "备忘已保存" };
   },
 
-  "app.memo.note.remove": async (input, ctx) => {
+  [ACTION.APP_MEMO_NOTE_REMOVE]: async (input, ctx) => {
     const id = String(input.id ?? "").trim();
     if (!id) throw new Error("要删除哪一条？请提供备忘 id");
     const notes = await readNotes(ctx.pod);
@@ -79,6 +81,6 @@ export default {
       message: removed ? "备忘已删除" : "这条备忘已经不存在",
     };
   },
-};
+});
 
 export { cleanNote, sortNotes };

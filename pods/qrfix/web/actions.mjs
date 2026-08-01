@@ -4,13 +4,15 @@
 // AI 画的二维码扫不出来是它存在的理由；如果它自己也产出一张扫不出来的图，
 // 那就白做了 —— 所以验证不是可选项，是默认开着的闸门。
 
+import { ACTION, defineActions } from "./action-parity.generated.mjs";
+
 /** 二维码要贴的边长。取正方形短边：码是方的，硬拉成长方形就废了。 */
 function squareSide(at) {
   return Math.max(21, Math.floor(Math.min(at.w, at.h)));
 }
 
-export default {
-  "app.qrfix.code.replace": async (input, ctx) => {
+export default defineActions({
+  [ACTION.APP_QRFIX_CODE_REPLACE]: async (input, ctx) => {
     const pod = ctx.pod;
     const at = input.at;
     const side = squareSide(at);
@@ -92,7 +94,7 @@ export default {
     const dataUrl = await pod.image.encode(merged.id);
     const art = await pod.artifact.emit({
       kind: "image",
-      action: "app.qrfix.code.replace",
+      action: ACTION.APP_QRFIX_CODE_REPLACE,
       data: dataUrl,
       message: `已贴真二维码 ${side}×${side}${scan ? " · 已验证可扫" : " · 未验证"}`,
     });
@@ -106,4 +108,4 @@ export default {
       message: scan ? `成品扫得出来：${scan.found[0].text}` : "已合成（未验证可扫性）",
     };
   },
-};
+});
